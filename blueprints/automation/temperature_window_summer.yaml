@@ -1,0 +1,291 @@
+blueprint:
+  name: Zomermodus - Raamadvies op basis van temperatuur
+  description: >
+    Houd het huis zo koel mogelijk tijdens warme zomerdagen.
+    De zomermodus is actief als de verwachte maximumtemperatuur van vandaag
+    boven de ingestelde drempel komt. Zodra de zomermodus actief is, wordt
+    vergeleken of het buiten warmer of koeler is dan binnen, en ontvang je
+    een melding met het advies om het raam open of dicht te doen.
+  domain: automation
+  input:
+
+    temperature_settings:
+      name: Instellingen
+      icon: mdi:thermometer
+      collapsed: true
+      input:
+        room_name:
+          name: Naam van de ruimte
+          description: >
+            De naam van de ruimte waarvoor deze automatisering geldt,
+            bijv. 'Woonkamer' of 'Slaapkamer'. Wordt gebruikt in de melding.
+          default: "Mijn kamer"
+          selector:
+            text:
+
+        outdoor_temperature:
+          name: Buitentemperatuursensor
+          description: De sensor die de actuele buitentemperatuur meet.
+          selector:
+            entity:
+              domain: sensor
+              device_class: temperature
+
+        indoor_temperature:
+          name: Binnentemperatuursensor
+          description: De sensor die de binnentemperatuur meet.
+          selector:
+            entity:
+              domain: sensor
+              device_class: temperature
+
+        state_helper:
+          name: Tekst-helper voor het bijhouden van het laatste advies
+          description: >
+            Maak een input_text helper aan via Instellingen → Helpers → Toevoegen → Tekst.
+            Deze helper onthoudt het laatste advies zodat je alleen een melding krijgt
+            als het advies verandert. Maak per automatisering een aparte helper aan.
+          selector:
+            entity:
+              domain: input_text
+
+
+    summer_mode_settings:
+      name: Zomermodus activering
+      icon: mdi:weather-sunny
+      collapsed: true
+      input:
+        forecast_sensor:
+          name: Sensor verwachte maximumtemperatuur vandaag (optioneel)
+          description: >
+            Kies een sensor die de verwachte maximumtemperatuur van vandaag
+            als waarde heeft, bijv. sensor.buienradar_temperature_1d of
+            sensor.openweathermap_forecast_max_temp.
+            Laat leeg als je een helper gebruikt.
+          default: []
+          selector:
+            entity:
+              domain: sensor
+              device_class: temperature
+
+        forecast_helper:
+          name: Helper verwachte maximumtemperatuur vandaag (optioneel)
+          description: >
+            Gebruik een input_number helper als alternatief voor de sensor.
+            Stel de waarde dagelijks handmatig in, of laat een andere
+            automatisering dit doen. Laat leeg als je een sensor gebruikt.
+          default: []
+          selector:
+            entity:
+              domain: input_number
+
+        minimum_temperatuur:
+          name: Minimale dagtemperatuur voor zomermodus (°C)
+          description: >
+            De zomermodus is actief als de verwachte maximumtemperatuur
+            van vandaag deze waarde bereikt of overschrijdt.
+          default: 20
+          selector:
+            number:
+              min: 15
+              max: 35
+              step: 0.5
+              unit_of_measurement: "°C"
+              mode: slider
+
+    window_settings:
+      name: Raaminstellingen
+      icon: mdi:window-open
+      collapsed: true
+      input:
+        window_sensor:
+          name: Raamsensor (optioneel)
+          description: Kies een raam- of deursensor. Laat leeg om over te slaan.
+          default: []
+          selector:
+            entity:
+              domain: binary_sensor
+              device_class:
+                - window
+                - door
+                - opening
+
+
+    automation_settings:
+      name: Automatiseringsinstellingen
+      icon: mdi:cog-outline
+      collapsed: true
+      input:
+        check_every:
+          name: Controle-interval (minuten)
+          description: Hoe vaak moet de automatisering controleren?
+          default: /15
+          selector:
+            select:
+              options:
+                - label: Elke 5 minuten
+                  value: /5
+                - label: Elke 10 minuten
+                  value: /10
+                - label: Elke 15 minuten
+                  value: /15
+                - label: Elke 30 minuten
+                  value: /30
+                - label: Elk uur
+                  value: /60
+              custom_value: false
+              multiple: false
+              sort: false
+
+
+    notification_settings:
+      name: Meldingsinstellingen
+      icon: mdi:bell-check-outline
+      collapsed: true
+      input:
+        notification_enabled:
+          name: Meldingen inschakelen
+          description: >
+            Schakel meldingen in om een waarschuwing te ontvangen op je apparaten.
+          default: disable_notification
+          selector:
+            select:
+              options:
+                - label: Meldingen inschakelen
+                  value: enable_notification
+                - label: Meldingen uitschakelen
+                  value: disable_notification
+              custom_value: false
+              multiple: false
+              sort: false
+
+        notification_devices:
+          name: Te melden apparaten
+          description: >
+            Selecteer de apparaten die een melding ontvangen.
+            Alleen apparaten met de Home Assistant-app worden weergegeven.
+          default: []
+          selector:
+            device:
+              filter:
+                - integration: mobile_app
+              multiple: true
+
+variables:
+  room_name: !input room_name
+  outdoor_sensor: !input outdoor_temperature
+  indoor_sensor: !input indoor_temperature
+  forecast_sensor: !input forecast_sensor
+  forecast_helper: !input forecast_helper
+  threshold: !input minimum_temperatuur
+  window: !input window_sensor
+  notification_on: !input notification_enabled
+  devices: !input notification_devices
+  state_helper: !input state_helper
+  outdoor_temp: "{{ states(outdoor_sensor) | float(0) | round(1) }}"
+  indoor_temp: "{{ states(indoor_sensor) | float(0) | round(1) }}"
+  outdoor_warmer: "{{ states(outdoor_sensor) | float(0) > states(indoor_sensor) | float(0) }}" 
+
+trigger:
+  - platform: time_pattern
+    minutes: !input check_every
+
+condition:
+  # Zomermodus: alleen actief als de dagverwachting de drempel bereikt
+  # Gebruikt de sensor als die is ingevuld, anders de helper
+  - condition: template
+    value_template: >
+      {% if forecast_sensor | length > 0 %}
+        {{ states(forecast_sensor) | float(0) >= threshold }}
+      {% elif forecast_helper | length > 0 %}
+        {{ states(forecast_helper) | float(0) >= threshold }}
+      {% else %}
+        false
+      {% endif %}
+
+
+action:
+  - variables:
+      window_open: >
+        {% if window | length > 0 %}
+          {{ is_state(window, 'on') }}
+        {% else %}
+          false
+        {% endif %}
+      window_status_text: >
+        {% if window | length > 0 %}
+          {% if window_open %}
+            🪟 {{ room_name }}: open
+          {% else %}
+            🔒 {{ room_name }}: dicht
+          {% endif %}
+        {% endif %}
+      advice_text: >
+        {% if window | length > 0 %}
+          {% if outdoor_warmer %}
+            Het is buiten warmer dan binnen. Doe het raam dicht om de warmte buiten te houden en het huis koel te houden.
+          {% else %}
+            Het is buiten koeler dan binnen. Doe het raam open om de koele lucht binnen te laten en het huis af te koelen.
+          {% endif %}
+        {% else %}
+          {% if outdoor_warmer %}
+            Het is buiten warmer dan binnen — is het raam al dicht?
+          {% else %}
+            Het is buiten koeler dan binnen — is het raam al open?
+          {% endif %}
+        {% endif %}
+      action_icon: >
+        {% if outdoor_warmer %}🔒{% else %}🪟{% endif %}
+      message_title: "{{ room_name }} – raamadvies"
+      message_body: >
+        Buiten: {{ outdoor_temp }}°C | Binnen: {{ indoor_temp }}°C
+        {% if window | length > 0 %}
+        {{ window_status_text }}
+        {% endif %}
+        {{ advice_text }}
+
+  # Alleen een melding als het advies veranderd is t.o.v. de vorige keer
+  - condition: template
+    value_template: >
+      {% set huidig_advies %}{% if outdoor_warmer %}raam_dicht{% else %}raam_open{% endif %}{% endset %}
+      {{ states(state_helper) != huidig_advies }}
+
+  # Geen melding als het raam al in de gewenste stand staat
+  - condition: template
+    value_template: >
+      {% if window | length > 0 %}
+        {% set raam_open = is_state(window, 'on') %}
+        {% set buiten_warmer = outdoor_temp | float(0) > indoor_temp | float(0) %}
+        {% if buiten_warmer %}
+          {{ raam_open }}
+        {% else %}
+          {{ not raam_open }}
+        {% endif %}
+      {% else %}
+        true
+      {% endif %}
+
+  - condition: template
+    value_template: "{{ notification_on == 'enable_notification' }}" 
+
+  - repeat:
+      for_each: "{{ devices }}"
+      sequence:
+        - variables:
+            notify_service: >
+              {{ 'notify.mobile_app_' ~ device_attr(repeat.item, 'name')
+                  | lower | replace(' ', '_') }}
+        - service: "{{ notify_service }}"
+          data:
+            title: "{{ message_title }}"
+            message: "{{ message_body }}"
+
+  # Sla het huidige advies op in de helper
+  - service: input_text.set_value
+    target:
+      entity_id: "{{ state_helper }}"
+    data:
+      value: "{% if outdoor_warmer %}raam_dicht{% else %}raam_open{% endif %}"
+
+mode: single
+max_exceeded: silent
