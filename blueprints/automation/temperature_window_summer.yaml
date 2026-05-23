@@ -6,7 +6,7 @@ blueprint:
     When active, you receive advice to open or close the window based on whether it
     is warmer or cooler outside than inside. Notifications are only sent when the
     advice changes, or when the window is opened or closed while it should not be.
-    Notification texts can be sent in English, Dutch, German or Spanish.
+    Notification texts can be sent in English, Dutch, German, Spanish, French or Italian.
   domain: automation
   input:
 
@@ -31,6 +31,10 @@ blueprint:
                   value: de
                 - label: Español
                   value: es
+                - label: Français
+                  value: fr
+                - label: Italiano
+                  value: it
               custom_value: false
               multiple: false
               sort: false
@@ -245,131 +249,129 @@ action:
           false
         {% endif %}
 
-      # --- Taalafhankelijke teksten / Language-dependent texts ---
+      # -------------------------------------------------------
+      # Translations — all language strings defined here
+      # -------------------------------------------------------
 
-      txt_window_open: "{{ room_name + ': open' }}"
-      txt_window_closed: >
+      # Labels: outdoor / indoor
+      t_outdoor: >
+        {% if lang == 'nl' %}Buiten
+        {% elif lang == 'de' %}Außen
+        {% elif lang == 'es' %}Exterior
+        {% elif lang == 'fr' %}Extérieur
+        {% elif lang == 'it' %}Esterno
+        {% else %}Outdoor{% endif %}
+      t_indoor: >
+        {% if lang == 'nl' %}Binnen
+        {% elif lang == 'de' %}Innen
+        {% elif lang == 'es' %}Interior
+        {% elif lang == 'fr' %}Intérieur
+        {% elif lang == 'it' %}Interno
+        {% else %}Indoor{% endif %}
+
+      # Window status
+      t_window_status_open: "{{ room_name + ': open' }}"
+      t_window_status_closed: >
         {% if lang == 'nl' %}{{ room_name + ': gesloten' }}
         {% elif lang == 'de' %}{{ room_name + ': geschlossen' }}
         {% elif lang == 'es' %}{{ room_name + ': cerrado' }}
+        {% elif lang == 'fr' %}{{ room_name + ': fermée' }}
+        {% elif lang == 'it' %}{{ room_name + ': chiusa' }}
         {% else %}{{ room_name + ': closed' }}{% endif %}
+
+      # Advice: warmer outside, window sensor present
+      t_advice_warmer_close: >
+        {% if lang == 'nl' %}Het is buiten warmer dan binnen. Doe het raam dicht om de warmte buiten te houden en de kamer koel te houden.
+        {% elif lang == 'de' %}Es ist draußen wärmer als drinnen. Schließe das Fenster, um die Wärme draußen zu halten und den Raum kühl zu halten.
+        {% elif lang == 'es' %}Hace más calor fuera que dentro. Cierra la ventana para mantener el calor fuera y la habitación fresca.
+        {% elif lang == 'fr' %}Il fait plus chaud dehors que dedans. Fermez la fenêtre pour garder la chaleur à l'extérieur et la pièce fraîche.
+        {% elif lang == 'it' %}Fa più caldo fuori che dentro. Chiudi la finestra per tenere il calore fuori e mantenere la stanza fresca.
+        {% else %}It is warmer outside than inside. Close the window to keep the heat out and the room cool.{% endif %}
+
+      # Advice: cooler outside, window sensor present
+      t_advice_cooler_open: >
+        {% if lang == 'nl' %}Het is buiten koeler dan binnen. Doe het raam open om de koele lucht binnen te laten en de kamer af te koelen.
+        {% elif lang == 'de' %}Es ist draußen kühler als drinnen. Öffne das Fenster, um die kühle Luft hereinzulassen und den Raum abzukühlen.
+        {% elif lang == 'es' %}Hace más frío fuera que dentro. Abre la ventana para dejar entrar el aire fresco y enfriar la habitación.
+        {% elif lang == 'fr' %}Il fait plus frais dehors que dedans. Ouvrez la fenêtre pour laisser entrer l'air frais et rafraîchir la pièce.
+        {% elif lang == 'it' %}Fa più fresco fuori che dentro. Apri la finestra per far entrare l'aria fresca e rinfrescare la stanza.
+        {% else %}It is cooler outside than inside. Open the window to let the cool air in and cool the room down.{% endif %}
+
+      # Advice: warmer outside, no window sensor
+      t_advice_warmer_no_sensor: >
+        {% if lang == 'nl' %}Het is buiten warmer dan binnen — staat het raam al dicht?
+        {% elif lang == 'de' %}Es ist draußen wärmer als drinnen — ist das Fenster schon geschlossen?
+        {% elif lang == 'es' %}Hace más calor fuera que dentro — ¿ya está la ventana cerrada?
+        {% elif lang == 'fr' %}Il fait plus chaud dehors que dedans — la fenêtre est-elle déjà fermée?
+        {% elif lang == 'it' %}Fa più caldo fuori che dentro — la finestra è già chiusa?
+        {% else %}It is warmer outside than inside — is the window already closed?{% endif %}
+
+      # Advice: cooler outside, no window sensor
+      t_advice_cooler_no_sensor: >
+        {% if lang == 'nl' %}Het is buiten koeler dan binnen — staat het raam al open?
+        {% elif lang == 'de' %}Es ist draußen kühler als drinnen — ist das Fenster schon geöffnet?
+        {% elif lang == 'es' %}Hace más frío fuera que dentro — ¿ya está la ventana abierta?
+        {% elif lang == 'fr' %}Il fait plus frais dehors que dedans — la fenêtre est-elle déjà ouverte?
+        {% elif lang == 'it' %}Fa più fresco fuori che dentro — la finestra è già aperta?
+        {% else %}It is cooler outside than inside — is the window already open?{% endif %}
+
+      # Title suffix: window opened
+      t_title_opened: >
+        {% if lang == 'nl' %}opengegaan — actie mogelijk nodig
+        {% elif lang == 'de' %}geöffnet — Maßnahme möglicherweise erforderlich
+        {% elif lang == 'es' %}abierta — puede ser necesario actuar
+        {% elif lang == 'fr' %}ouverte — une action peut être nécessaire
+        {% elif lang == 'it' %}aperta — potrebbe essere necessario intervenire
+        {% else %}opened — action may be needed{% endif %}
+
+      # Title suffix: window closed
+      t_title_closed: >
+        {% if lang == 'nl' %}dichtgegaan — actie mogelijk nodig
+        {% elif lang == 'de' %}geschlossen — Maßnahme möglicherweise erforderlich
+        {% elif lang == 'es' %}cerrada — puede ser necesario actuar
+        {% elif lang == 'fr' %}fermée — une action peut être nécessaire
+        {% elif lang == 'it' %}chiusa — potrebbe essere necessario intervenire
+        {% else %}closed — action may be needed{% endif %}
+
+      # Title suffix: periodic check
+      t_title_advice: >
+        {% if lang == 'nl' %}raamadvies
+        {% elif lang == 'de' %}Fensterempfehlung
+        {% elif lang == 'es' %}consejo de ventana
+        {% elif lang == 'fr' %}conseil de fenêtre
+        {% elif lang == 'it' %}consiglio finestra
+        {% else %}window advice{% endif %}
+
+      # -------------------------------------------------------
+      # Composed message variables
+      # -------------------------------------------------------
 
       window_status_text: >
         {% if window | length > 0 %}
-          {% if window_open %}
-            {{ txt_window_open }}
-          {% else %}
-            {{ txt_window_closed }}
+          {% if window_open %}{{ t_window_status_open }}
+          {% else %}{{ t_window_status_closed }}
           {% endif %}
         {% endif %}
 
       advice_text: >
-        {% if lang == 'nl' %}
-          {% if window | length > 0 %}
-            {% if outdoor_warmer %}
-              Het is buiten warmer dan binnen. Doe het raam dicht om de warmte buiten te houden en de kamer koel te houden.
-            {% else %}
-              Het is buiten koeler dan binnen. Doe het raam open om de koele lucht binnen te laten en de kamer af te koelen.
-            {% endif %}
-          {% else %}
-            {% if outdoor_warmer %}
-              Het is buiten warmer dan binnen — staat het raam al dicht?
-            {% else %}
-              Het is buiten koeler dan binnen — staat het raam al open?
-            {% endif %}
-          {% endif %}
-        {% elif lang == 'de' %}
-          {% if window | length > 0 %}
-            {% if outdoor_warmer %}
-              Es ist draußen wärmer als drinnen. Schließe das Fenster, um die Wärme draußen zu halten und den Raum kühl zu halten.
-            {% else %}
-              Es ist draußen kühler als drinnen. Öffne das Fenster, um die kühle Luft hereinzulassen und den Raum abzukühlen.
-            {% endif %}
-          {% else %}
-            {% if outdoor_warmer %}
-              Es ist draußen wärmer als drinnen — ist das Fenster schon geschlossen?
-            {% else %}
-              Es ist draußen kühler als drinnen — ist das Fenster schon geöffnet?
-            {% endif %}
-          {% endif %}
-        {% elif lang == 'es' %}
-          {% if window | length > 0 %}
-            {% if outdoor_warmer %}
-              Hace más calor fuera que dentro. Cierra la ventana para mantener el calor fuera y la habitación fresca.
-            {% else %}
-              Hace más frío fuera que dentro. Abre la ventana para dejar entrar el aire fresco y enfriar la habitación.
-            {% endif %}
-          {% else %}
-            {% if outdoor_warmer %}
-              Hace más calor fuera que dentro — ¿ya está la ventana cerrada?
-            {% else %}
-              Hace más frío fuera que dentro — ¿ya está la ventana abierta?
-            {% endif %}
+        {% if window | length > 0 %}
+          {% if outdoor_warmer %}{{ t_advice_warmer_close }}
+          {% else %}{{ t_advice_cooler_open }}
           {% endif %}
         {% else %}
-          {% if window | length > 0 %}
-            {% if outdoor_warmer %}
-              It is warmer outside than inside. Close the window to keep the heat out and the room cool.
-            {% else %}
-              It is cooler outside than inside. Open the window to let the cool air in and cool the room down.
-            {% endif %}
-          {% else %}
-            {% if outdoor_warmer %}
-              It is warmer outside than inside — is the window already closed?
-            {% else %}
-              It is cooler outside than inside — is the window already open?
-            {% endif %}
+          {% if outdoor_warmer %}{{ t_advice_warmer_no_sensor }}
+          {% else %}{{ t_advice_cooler_no_sensor }}
           {% endif %}
         {% endif %}
 
       message_title: >
-        {% if lang == 'nl' %}
-          {% if trigger.id == 'window_opened' %}
-            {{ room_name }} opengegaan — actie mogelijk nodig
-          {% elif trigger.id == 'window_closed' %}
-            {{ room_name }} dichtgegaan — actie mogelijk nodig
-          {% else %}
-            {{ room_name }} — raamadvies
-          {% endif %}
-        {% elif lang == 'de' %}
-          {% if trigger.id == 'window_opened' %}
-            {{ room_name }} geöffnet — Maßnahme möglicherweise erforderlich
-          {% elif trigger.id == 'window_closed' %}
-            {{ room_name }} geschlossen — Maßnahme möglicherweise erforderlich
-          {% else %}
-            {{ room_name }} — Fensterempfehlung
-          {% endif %}
-        {% elif lang == 'es' %}
-          {% if trigger.id == 'window_opened' %}
-            {{ room_name }} abierta — puede ser necesario actuar
-          {% elif trigger.id == 'window_closed' %}
-            {{ room_name }} cerrada — puede ser necesario actuar
-          {% else %}
-            {{ room_name }} — consejo de ventana
-          {% endif %}
-        {% else %}
-          {% if trigger.id == 'window_opened' %}
-            {{ room_name }} opened — action may be needed
-          {% elif trigger.id == 'window_closed' %}
-            {{ room_name }} closed — action may be needed
-          {% else %}
-            {{ room_name }} — window advice
-          {% endif %}
+        {% if trigger.id == 'window_opened' %}{{ room_name }} {{ t_title_opened }}
+        {% elif trigger.id == 'window_closed' %}{{ room_name }} {{ t_title_closed }}
+        {% else %}{{ room_name }} — {{ t_title_advice }}
         {% endif %}
 
-      txt_outdoor: >
-        {% if lang == 'nl' %}Buiten
-        {% elif lang == 'de' %}Außen
-        {% elif lang == 'es' %}Exterior
-        {% else %}Outdoor{% endif %}
-      txt_indoor: >
-        {% if lang == 'nl' %}Binnen
-        {% elif lang == 'de' %}Innen
-        {% elif lang == 'es' %}Interior
-        {% else %}Indoor{% endif %}
-
       message_body: >
-        {{ txt_outdoor }}: {{ outdoor_temp }}°C | {{ txt_indoor }}: {{ indoor_temp }}°C
+        {{ t_outdoor }}: {{ outdoor_temp }}°C | {{ t_indoor }}: {{ indoor_temp }}°C
         {% if window | length > 0 %}
         {{ window_status_text }}
         {% endif %}
