@@ -143,17 +143,6 @@ blueprint:
                 - door
                 - opening
 
-        window_location:
-          name: Window location (optional) / Raamlocatie (optioneel)
-          description: >
-            Name or location of the window, e.g. 'Living room' or 'Bedroom'.
-            Only applies if you have configured a window sensor.
-            Naam of locatie van het raam, bijv. 'Woonkamer' of 'Slaapkamer'.
-            Alleen van toepassing als je een raamsensor hebt ingesteld.
-          default: "Window"
-          selector:
-            text:
-
     automation_settings:
       name: Automation settings / Automatiseringsinstellingen
       icon: mdi:cog-outline
@@ -230,7 +219,6 @@ variables:
   forecast_helper: !input forecast_helper
   threshold: !input minimum_temperature
   window: !input window_sensor
-  location: !input window_location
   notification_on: !input notification_enabled
   devices: !input notification_devices
   outdoor_temp: "{{ states(outdoor_sensor) | float(0) | round(1) }}"
@@ -275,8 +263,8 @@ action:
 
       # --- Taalafhankelijke teksten / Language-dependent texts ---
 
-      txt_window_open: "{{ location + (': open' if lang == 'en' else ': open') }}"
-      txt_window_closed: "{{ location + (': closed' if lang == 'en' else ': gesloten') }}"
+      txt_window_open: "{{ room_name + ': open' }}"
+      txt_window_closed: "{{ room_name + (': closed' if lang == 'en' else ': gesloten') }}"
 
       window_status_text: >
         {% if window | length > 0 %}
@@ -321,17 +309,17 @@ action:
       message_title: >
         {% if lang == 'nl' %}
           {% if trigger.id == 'window_opened' %}
-            {{ location }} opengegaan — actie mogelijk nodig
+            {{ room_name }} opengegaan — actie mogelijk nodig
           {% elif trigger.id == 'window_closed' %}
-            {{ location }} dichtgegaan — actie mogelijk nodig
+            {{ room_name }} dichtgegaan — actie mogelijk nodig
           {% else %}
             {{ room_name }} — raamadvies
           {% endif %}
         {% else %}
           {% if trigger.id == 'window_opened' %}
-            {{ location }} opened — action may be needed
+            {{ room_name }} opened — action may be needed
           {% elif trigger.id == 'window_closed' %}
-            {{ location }} closed — action may be needed
+            {{ room_name }} closed — action may be needed
           {% else %}
             {{ room_name }} — window advice
           {% endif %}
@@ -347,11 +335,15 @@ action:
         {% endif %}
         {{ advice_text }}
 
-  # Only notify when the advice has changed since last time
+  # Only check if advice has changed when triggered by timer (skip for window state changes)
   - condition: template
     value_template: >
-      {% set current_advice %}{% if outdoor_warmer %}window_closed{% else %}window_open{% endif %}{% endset %}
-      {{ states(state_helper) != current_advice }}
+      {% if trigger.id == 'window_opened' or trigger.id == 'window_closed' %}
+        true
+      {% else %}
+        {% set current_advice %}{% if outdoor_warmer %}window_closed{% else %}window_open{% endif %}{% endset %}
+        {{ states(state_helper) != current_advice }}
+      {% endif %}
 
   # No notification if the window is already in the desired position
   - condition: template
