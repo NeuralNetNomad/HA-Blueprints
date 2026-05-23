@@ -299,7 +299,7 @@ action:
 
       # Advice: warmer outside, no window sensor
       t_advice_warmer_no_sensor: >
-        {% if lang == 'nl' %}Het is buiten warmer dan binnen — staat het raam al dicht?
+        {% if lang == 'nl' %}Het is buiten warmer dan binnen — is het raam al dicht?
         {% elif lang == 'de' %}Es ist draußen wärmer als drinnen — ist das Fenster schon geschlossen?
         {% elif lang == 'es' %}Hace más calor fuera que dentro — ¿ya está la ventana cerrada?
         {% elif lang == 'fr' %}Il fait plus chaud dehors que dedans — la fenêtre est-elle déjà fermée?
@@ -308,7 +308,7 @@ action:
 
       # Advice: cooler outside, no window sensor
       t_advice_cooler_no_sensor: >
-        {% if lang == 'nl' %}Het is buiten koeler dan binnen — staat het raam al open?
+        {% if lang == 'nl' %}Het is buiten koeler dan binnen — is het raam al open?
         {% elif lang == 'de' %}Es ist draußen kühler als drinnen — ist das Fenster schon geöffnet?
         {% elif lang == 'es' %}Hace más frío fuera que dentro — ¿ya está la ventana abierta?
         {% elif lang == 'fr' %}Il fait plus frais dehors que dedans — la fenêtre est-elle déjà ouverte?
