@@ -299,13 +299,16 @@ action:
       - delay:
           seconds: "{{ window_delay | int(0) }}"
       # After the delay, abort if the window state has changed back to what it was
-      - condition: template
-        value_template: >
-          {% if trigger.id == 'window_opened' %}
-            {{ is_state(window, 'on') }}
-          {% else %}
-            {{ is_state(window, 'off') }}
-          {% endif %}
+      - if:
+          - condition: template
+            value_template: >
+              {% if trigger.id == 'window_opened' %}
+                {{ not is_state(window, 'on') }}
+              {% else %}
+                {{ not is_state(window, 'off') }}
+              {% endif %}
+        then:
+          - stop: "Window state changed back during delay, aborting"
 
   - variables:
       window_open: >
@@ -470,7 +473,7 @@ action:
   - condition: template
     value_template: "{{ notification_on == 'enable_notification' }}"
 
-  # Wait 10 minutes to filter out temporary or erroneous sensor readings.
+  # Wait for the configured notification delay to filter out temporary or erroneous sensor readings.
   # The automation is aborted if the advice is no longer valid after the wait.
   - delay:
       minutes: "{{ notification_delay | int(0) }}"
