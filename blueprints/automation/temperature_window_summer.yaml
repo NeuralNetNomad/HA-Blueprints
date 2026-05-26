@@ -473,29 +473,37 @@ action:
   - condition: template
     value_template: "{{ notification_on == 'enable_notification' }}"
 
-  # Wait for the configured notification delay to filter out temporary or erroneous sensor readings.
-  # The automation is aborted if the advice is no longer valid after the wait.
-  - delay:
-      minutes: "{{ notification_delay | int(0) }}"
-
-  # Re-check: abort if the temperature situation has reversed in the meantime
-  - condition: template
-    value_template: >
-      {{ (states(outdoor_sensor) | float(0) > states(indoor_sensor) | float(0)) == outdoor_warmer }}
-
-  # Re-check: abort if the window is now already in the desired position
-  - condition: template
-    value_template: >
-      {% if window | length > 0 %}
-        {% set window_is_open = is_state(window, 'on') %}
-        {% if outdoor_warmer %}
-          {{ window_is_open }}
-        {% else %}
-          {{ not window_is_open }}
-        {% endif %}
-      {% else %}
-        true
-      {% endif %}
+  # Only apply the notification delay for the time trigger (temperature change detection).
+  # Window triggers bypass this delay and notify immediately after the window_delay.
+  - if:
+      - condition: template
+        value_template: "{{ trigger.id == 'time_trigger' and notification_delay | int(0) > 0 }}"
+    then:
+      - delay:
+          minutes: "{{ notification_delay | int(0) }}"
+      # Re-check: abort if the temperature situation has reversed during the wait
+      - if:
+          - condition: template
+            value_template: >
+              {{ (states(outdoor_sensor) | float(0) > states(indoor_sensor) | float(0)) != outdoor_warmer }}
+        then:
+          - stop: "Temperature situation reversed during notification delay, aborting"
+      # Re-check: abort if the window is now already in the desired position
+      - if:
+          - condition: template
+            value_template: >
+              {% if window | length > 0 %}
+                {% set window_is_open = is_state(window, 'on') %}
+                {% if outdoor_warmer %}
+                  {{ not window_is_open }}
+                {% else %}
+                  {{ window_is_open }}
+                {% endif %}
+              {% else %}
+                false
+              {% endif %}
+        then:
+          - stop: "Window already in desired position after notification delay, aborting"
 
   - repeat:
       for_each: "{{ devices }}"
