@@ -136,6 +136,21 @@ blueprint:
                 - door
                 - opening
 
+        window_delay:
+          name: Delay after window state change (seconds)
+          description: >
+            How long to wait after the window is opened or closed before
+            sending a notification. Useful to avoid alerts when the window
+            is only briefly opened or closed. Set to 0 for no delay.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 3600
+              step: 1
+              unit_of_measurement: "s"
+              mode: box
+
     automation_settings:
       name: Automation settings
       icon: mdi:cog-outline
@@ -197,6 +212,23 @@ blueprint:
                 - integration: mobile_app
               multiple: true
 
+        notify_only_when_home:
+          name: Only notify when home
+          description: >
+            When enabled, a notification is only sent to a device if that device
+            or its associated person is currently home.
+          default: notify_always
+          selector:
+            select:
+              options:
+                - label: Always notify
+                  value: notify_always
+                - label: Only notify when home
+                  value: notify_when_home
+              custom_value: false
+              multiple: false
+              sort: false
+
 variables:
   lang: !input notification_language
   room_name: !input room_name
@@ -207,8 +239,10 @@ variables:
   forecast_helper: !input forecast_helper
   threshold: !input minimum_temperature
   window: !input window_sensor
+  window_delay: !input window_delay
   notification_on: !input notification_enabled
   devices: !input notification_devices
+  notify_only_when_home: !input notify_only_when_home
   outdoor_temp: "{{ states(outdoor_sensor) | float(0) | round(1) }}"
   indoor_temp: "{{ states(indoor_sensor) | float(0) | round(1) }}"
   outdoor_warmer: "{{ states(outdoor_sensor) | float(0) > states(indoor_sensor) | float(0) }}"
@@ -241,6 +275,22 @@ condition:
       {% endif %}
 
 action:
+  # Wait before processing window trigger, so brief open/close events are ignored
+  - if:
+      - condition: template
+        value_template: "{{ trigger.id in ['window_opened', 'window_closed'] and window_delay | int(0) > 0 }}"
+    then:
+      - delay:
+          seconds: "{{ window_delay | int(0) }}"
+      # After the delay, abort if the window state has changed back to what it was
+      - condition: template
+        value_template: >
+          {% if trigger.id == 'window_opened' %}
+            {{ is_state(window, 'on') }}
+          {% else %}
+            {{ is_state(window, 'off') }}
+          {% endif %}
+
   - variables:
       window_open: >
         {% if window | length > 0 %}
@@ -411,6 +461,34 @@ action:
             notify_service: >
               {{ 'notify.mobile_app_' ~ device_attr(repeat.item, 'name')
                   | lower | replace(' ', '_') }}
+            device_is_home: >
+              {% if notify_only_when_home == 'notify_when_home' %}
+                {% set dev_id = repeat.item %}
+                {% set person_home = namespace(found=false) %}
+                {% for person in states.person %}
+                  {% if device_attr(dev_id, 'id') in (person.attributes.device_trackers | default([])) %}
+                    {% if person.state == 'home' %}
+                      {% set person_home.found = true %}
+                    {% endif %}
+                  {% endif %}
+                {% endfor %}
+                {% if person_home.found %}
+                  true
+                {% else %}
+                  {% set tracker = device_entities(dev_id)
+                      | select('match', 'device_tracker\\..*')
+                      | list %}
+                  {% if tracker | length > 0 %}
+                    {{ is_state(tracker[0], 'home') }}
+                  {% else %}
+                    false
+                  {% endif %}
+                {% endif %}
+              {% else %}
+                true
+              {% endif %}
+        - condition: template
+          value_template: "{{ device_is_home }}"
         - service: "{{ notify_service }}"
           data:
             title: "{{ message_title }}"
