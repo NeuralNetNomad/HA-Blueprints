@@ -552,5 +552,6 @@ action:
     data:
       value: "{% if outdoor_warmer %}window_closed{% else %}window_open{% endif %}"
 
-mode: single
+mode: queued
 max_exceeded: silent
+max: 10
