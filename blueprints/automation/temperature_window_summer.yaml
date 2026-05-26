@@ -178,6 +178,21 @@ blueprint:
               multiple: false
               sort: false
 
+        notification_delay:
+          name: Notification delay (minutes)
+          description: >
+            How long to wait after a situation is detected before sending a
+            notification. This filters out brief or erroneous sensor readings.
+            Set to 0 to notify immediately.
+          default: 10
+          selector:
+            number:
+              min: 0
+              max: 60
+              step: 1
+              unit_of_measurement: "min"
+              mode: box
+
     notification_settings:
       name: Notification settings
       icon: mdi:bell-check-outline
@@ -240,6 +255,7 @@ variables:
   threshold: !input minimum_temperature
   window: !input window_sensor
   window_delay: !input window_delay
+  notification_delay: !input notification_delay
   notification_on: !input notification_enabled
   devices: !input notification_devices
   notify_only_when_home: !input notify_only_when_home
@@ -453,6 +469,30 @@ action:
 
   - condition: template
     value_template: "{{ notification_on == 'enable_notification' }}"
+
+  # Wait 10 minutes to filter out temporary or erroneous sensor readings.
+  # The automation is aborted if the advice is no longer valid after the wait.
+  - delay:
+      minutes: "{{ notification_delay | int(0) }}"
+
+  # Re-check: abort if the temperature situation has reversed in the meantime
+  - condition: template
+    value_template: >
+      {{ (states(outdoor_sensor) | float(0) > states(indoor_sensor) | float(0)) == outdoor_warmer }}
+
+  # Re-check: abort if the window is now already in the desired position
+  - condition: template
+    value_template: >
+      {% if window | length > 0 %}
+        {% set window_is_open = is_state(window, 'on') %}
+        {% if outdoor_warmer %}
+          {{ window_is_open }}
+        {% else %}
+          {{ not window_is_open }}
+        {% endif %}
+      {% else %}
+        true
+      {% endif %}
 
   - repeat:
       for_each: "{{ devices }}"
