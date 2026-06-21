@@ -36,11 +36,16 @@ blueprint:
 
     raam_sensor:
       name: Raamsensor
-      description: De binary sensor die aangeeft of het raam open of dicht is.
+      description: >
+        De binary sensor die aangeeft of het raam open of dicht is. Let op:
+        sommige raamsensoren (zoals IKEA MYGGBETT) gebruiken device_class
+        "door" in plaats van "window" - beide worden hier getoond.
       selector:
         entity:
           domain: binary_sensor
-          device_class: window
+          device_class:
+            - window
+            - door
 
     drempel_max_temperatuur:
       name: Drempelwaarde maximumtemperatuur
