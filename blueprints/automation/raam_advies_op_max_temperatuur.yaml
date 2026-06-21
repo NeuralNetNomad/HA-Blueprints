@@ -1,0 +1,221 @@
+blueprint:
+  name: Raamadvies bij hoge maximumtemperatuur
+  description: >
+    Geeft advies (open/dicht) over een raam, gebaseerd op binnen- en
+    buitentemperatuur en de raamstatus, maar alleen op dagen waarop de
+    verwachte maximumtemperatuur boven een instelbare drempel ligt.
+    Het advies wordt eenmalig als notificatie gestuurd en alleen opnieuw
+    gestuurd als het advies wijzigt (geen herhaalmeldingen bij gelijk advies).
+  domain: automation
+  source_url: https://github.com/
+
+  input:
+    buiten_temperatuur_sensor:
+      name: Buitentemperatuur sensor
+      description: De sensor die de huidige buitentemperatuur meet.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+
+    binnen_temperatuur_sensor:
+      name: Binnentemperatuur sensor
+      description: De sensor die de huidige binnentemperatuur meet.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+
+    max_temperatuur_vandaag_sensor:
+      name: Maximumtemperatuur van vandaag sensor
+      description: De sensor met de verwachte maximumtemperatuur voor vandaag.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+
+    raam_sensor:
+      name: Raamsensor
+      description: De binary sensor die aangeeft of het raam open of dicht is.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: window
+
+    drempel_max_temperatuur:
+      name: Drempelwaarde maximumtemperatuur
+      description: >
+        Alleen als de maximumtemperatuur van vandaag boven deze waarde komt,
+        wordt er advies gegeven.
+      default: 22
+      selector:
+        number:
+          min: 0
+          max: 40
+          step: 0.5
+          unit_of_measurement: "°C"
+          mode: box
+
+    stijging_periode_minuten:
+      name: Periode voor temperatuurstijging (advies 1)
+      description: >
+        Aantal minuten waarover gekeken wordt of de binnentemperatuur is
+        opgelopen, voor advies 1 (raam open, binnen kouder dan buiten, maar
+        binnentemperatuur loopt op).
+      default: 15
+      selector:
+        number:
+          min: 5
+          max: 120
+          step: 5
+          unit_of_measurement: minuten
+          mode: box
+
+    notificatie_apparaten:
+      name: Telefoons voor melding
+      description: >
+        Selecteer de mobiele apparaten (telefoons met de Home Assistant
+        Companion App) die de melding moeten ontvangen.
+      selector:
+        device:
+          filter:
+            integration: mobile_app
+          multiple: true
+
+    geheugen_helper:
+      name: Geheugen-helper (input_text)
+      description: >
+        Maak in Instellingen > Apparaten & Diensten > Helpers een nieuwe
+        helper aan van het type "Tekst" (input_text, max lengte minimaal 20
+        tekens) en selecteer die hier. Deze helper wordt door de blueprint
+        gebruikt om te onthouden welk advies het laatst is gegeven, zodat
+        je niet steeds opnieuw een melding krijgt voor hetzelfde advies.
+        Gebruik per raam een eigen helper.
+      selector:
+        entity:
+          domain: input_text
+
+    check_interval_minuten:
+      name: Controle-interval
+      description: >
+        Naast directe controle bij wijziging van een sensor, wordt ook op
+        dit vaste interval (in minuten) gecontroleerd of het advies nog
+        klopt.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: minuten
+          mode: box
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input buiten_temperatuur_sensor
+  - platform: state
+    entity_id: !input binnen_temperatuur_sensor
+  - platform: state
+    entity_id: !input max_temperatuur_vandaag_sensor
+  - platform: state
+    entity_id: !input raam_sensor
+  - platform: time_pattern
+    minutes: !input check_interval_minuten
+
+variables:
+  buiten_temperatuur_sensor: !input buiten_temperatuur_sensor
+  binnen_temperatuur_sensor: !input binnen_temperatuur_sensor
+  max_temperatuur_vandaag_sensor: !input max_temperatuur_vandaag_sensor
+  raam_sensor: !input raam_sensor
+  drempel_max_temperatuur: !input drempel_max_temperatuur
+  stijging_periode_minuten: !input stijging_periode_minuten
+  geheugen_helper: !input geheugen_helper
+
+  buiten_temp: "{{ states(buiten_temperatuur_sensor) | float(none) }}"
+  binnen_temp: "{{ states(binnen_temperatuur_sensor) | float(none) }}"
+  max_temp_vandaag: "{{ states(max_temperatuur_vandaag_sensor) | float(none) }}"
+  raam_open: "{{ is_state(raam_sensor, 'on') }}"
+
+  vorig_advies: "{{ states(geheugen_helper) | trim }}"
+
+  drempel_overschreden: >
+    {{ max_temp_vandaag is not none and max_temp_vandaag > drempel_max_temperatuur }}
+
+  geldige_metingen: >
+    {{ buiten_temp is not none and binnen_temp is not none }}
+
+condition:
+  - condition: template
+    value_template: "{{ drempel_overschreden and geldige_metingen }}"
+
+action:
+  - action: history.history_during_period
+    data:
+      entity_id: "{{ binnen_temperatuur_sensor }}"
+      start_time: "{{ (now() - timedelta(minutes=stijging_periode_minuten)).isoformat() }}"
+      no_attributes: true
+      minimal_response: true
+    response_variable: binnen_temp_historie
+
+  - variables:
+      historie_punten: >
+        {{ binnen_temp_historie[binnen_temperatuur_sensor]
+           | default([])
+           | map(attribute='state')
+           | map('float', none)
+           | select('ne', none)
+           | list }}
+      binnen_temp_oudste_in_periode: >
+        {{ historie_punten[0] if historie_punten | length > 0 else binnen_temp }}
+      binnen_loopt_op: >
+        {{ binnen_temp is not none and binnen_temp_oudste_in_periode is not none
+           and binnen_temp > binnen_temp_oudste_in_periode }}
+
+      nieuw_advies: >
+        {% if raam_open and binnen_temp < buiten_temp and binnen_loopt_op %}
+          raam_dicht_1
+        {% elif not raam_open and binnen_temp > buiten_temp %}
+          raam_open_2
+        {% elif raam_open and binnen_temp > buiten_temp %}
+          raam_open_3
+        {% elif not raam_open and binnen_temp < buiten_temp %}
+          raam_dicht_4
+        {% else %}
+          geen_advies
+        {% endif %}
+      nieuw_advies_clean: "{{ nieuw_advies | trim }}"
+
+      advies_tekst_raw: >
+        {% if nieuw_advies | trim in ['raam_dicht_1', 'raam_dicht_4'] %}
+          Het raam moet dicht.
+        {% elif nieuw_advies | trim in ['raam_open_2', 'raam_open_3'] %}
+          Het raam moet open.
+        {% else %}
+          ""
+        {% endif %}
+      advies_tekst: "{{ advies_tekst_raw | trim }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ nieuw_advies_clean != 'geen_advies' and nieuw_advies_clean != vorig_advies }}
+        sequence:
+          - action: input_text.set_value
+            target:
+              entity_id: "{{ geheugen_helper }}"
+            data:
+              value: "{{ nieuw_advies_clean }}"
+
+          - repeat:
+              for_each: !input notificatie_apparaten
+              sequence:
+                - action: notify.send_message
+                  target:
+                    device_id: "{{ repeat.item }}"
+                  data:
+                    title: "Raamadvies"
+                    message: "{{ advies_tekst }}"
