@@ -90,6 +90,24 @@ blueprint:
           unit_of_measurement: minuten
           mode: box
 
+    notificatie_titel:
+      name: Titel van de melding
+      description: >
+        De titel die boven de melding wordt weergegeven.
+      default: "Raamadvies"
+      selector:
+        text:
+
+    notificatie_bericht:
+      name: Inhoud van de melding
+      description: >
+        De tekst van de melding. Gebruik {advies} op de plek waar het
+        berekende advies ("Het raam moet dicht." of "Het raam moet open.")
+        moet komen te staan.
+      default: "{advies}"
+      selector:
+        text:
+
     notificatie_apparaten:
       name: Telefoons voor melding
       description: >
@@ -153,6 +171,8 @@ variables:
   stijging_periode_minuten: !input stijging_periode_minuten
   trend_helper: !input trend_helper
   geheugen_helper: !input geheugen_helper
+  notificatie_titel: !input notificatie_titel
+  notificatie_bericht: !input notificatie_bericht
 
   buiten_temp: "{{ states(buiten_temperatuur_sensor) | float(none) }}"
   binnen_temp: "{{ states(binnen_temperatuur_sensor) | float(none) }}"
@@ -249,5 +269,5 @@ action:
                   target:
                     device_id: "{{ repeat.item }}"
                   data:
-                    title: "Raamadvies"
-                    message: "{{ advies_tekst }}"
+                    title: "{{ notificatie_titel | replace('{advies}', advies_tekst) }}"
+                    message: "{{ notificatie_bericht | replace('{advies}', advies_tekst) }}"
