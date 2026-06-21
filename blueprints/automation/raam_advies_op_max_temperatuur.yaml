@@ -61,20 +61,19 @@ blueprint:
           unit_of_measurement: "°C"
           mode: box
 
-    stijging_periode_minuten:
-      name: Periode voor temperatuurstijging (advies 1)
+    binnen_temp_stijgend_sensor:
+      name: Trend-sensor "binnentemperatuur loopt op"
       description: >
-        Aantal minuten waarover gekeken wordt of de binnentemperatuur is
-        opgelopen, voor advies 1 (raam open, binnen kouder dan buiten, maar
-        binnentemperatuur loopt op).
-      default: 15
+        Een Trend-helper (binary sensor) die aangeeft of de binnentemperatuur
+        momenteel oploopt. Maak deze eenmalig aan via Instellingen >
+        Apparaten & Diensten > Helpers > Helper toevoegen > Trend, met als
+        bron-entiteit je binnentemperatuursensor en "Stijgend" als richting.
+        Wordt gebruikt voor advies 1 (raam open, binnen kouder dan buiten,
+        maar binnentemperatuur loopt op).
       selector:
-        number:
-          min: 5
-          max: 120
-          step: 5
-          unit_of_measurement: minuten
-          mode: box
+        entity:
+          domain: binary_sensor
+          device_class: heat
 
     notificatie_apparaten:
       name: Telefoons voor melding
@@ -127,6 +126,8 @@ trigger:
     entity_id: !input max_temperatuur_vandaag_sensor
   - platform: state
     entity_id: !input raam_sensor
+  - platform: state
+    entity_id: !input binnen_temp_stijgend_sensor
   - platform: time_pattern
     minutes: !input check_interval_minuten
 
@@ -136,13 +137,14 @@ variables:
   max_temperatuur_vandaag_sensor: !input max_temperatuur_vandaag_sensor
   raam_sensor: !input raam_sensor
   drempel_max_temperatuur: !input drempel_max_temperatuur
-  stijging_periode_minuten: !input stijging_periode_minuten
+  binnen_temp_stijgend_sensor: !input binnen_temp_stijgend_sensor
   geheugen_helper: !input geheugen_helper
 
   buiten_temp: "{{ states(buiten_temperatuur_sensor) | float(none) }}"
   binnen_temp: "{{ states(binnen_temperatuur_sensor) | float(none) }}"
   max_temp_vandaag: "{{ states(max_temperatuur_vandaag_sensor) | float(none) }}"
   raam_open: "{{ is_state(raam_sensor, 'on') }}"
+  binnen_loopt_op: "{{ is_state(binnen_temp_stijgend_sensor, 'on') }}"
 
   vorig_advies: "{{ states(geheugen_helper) | trim }}"
 
@@ -157,28 +159,7 @@ condition:
     value_template: "{{ drempel_overschreden and geldige_metingen }}"
 
 action:
-  - action: history.history_during_period
-    data:
-      entity_id: "{{ binnen_temperatuur_sensor }}"
-      start_time: "{{ (now() - timedelta(minutes=stijging_periode_minuten)).isoformat() }}"
-      no_attributes: true
-      minimal_response: true
-    response_variable: binnen_temp_historie
-
   - variables:
-      historie_punten: >
-        {{ binnen_temp_historie[binnen_temperatuur_sensor]
-           | default([])
-           | map(attribute='state')
-           | map('float', none)
-           | select('ne', none)
-           | list }}
-      binnen_temp_oudste_in_periode: >
-        {{ historie_punten[0] if historie_punten | length > 0 else binnen_temp }}
-      binnen_loopt_op: >
-        {{ binnen_temp is not none and binnen_temp_oudste_in_periode is not none
-           and binnen_temp > binnen_temp_oudste_in_periode }}
-
       nieuw_advies: >
         {% if raam_open and binnen_temp < buiten_temp and binnen_loopt_op %}
           raam_dicht_1
