@@ -197,14 +197,13 @@ action:
       trend_temp_oud: >
         {{ trend_opgeslagen.split('|')[0] | float(none)
            if '|' in trend_opgeslagen else none }}
-      trend_tijd_oud: >
-        {{ trend_opgeslagen.split('|')[1]
+      trend_tijd_oud_ts: >
+        {{ trend_opgeslagen.split('|')[1] | float(none)
            if '|' in trend_opgeslagen else none }}
-      trend_tijd_oud_dt: >
-        {{ as_datetime(trend_tijd_oud) if trend_tijd_oud is not none else none }}
+      trend_nu_ts: "{{ as_timestamp(now()) }}"
       trend_leeftijd_minuten: >
-        {{ ((now() - trend_tijd_oud_dt).total_seconds() / 60)
-           if trend_tijd_oud_dt is not none else none }}
+        {{ ((trend_nu_ts - trend_tijd_oud_ts) / 60)
+           if trend_tijd_oud_ts is not none else none }}
       trend_geldig: >
         {{ trend_temp_oud is not none and trend_leeftijd_minuten is not none
            and trend_leeftijd_minuten >= stijging_periode_minuten }}
@@ -248,7 +247,7 @@ action:
             target:
               entity_id: "{{ trend_helper }}"
             data:
-              value: "{{ binnen_temp }}|{{ now().isoformat() }}"
+              value: "{{ binnen_temp }}|{{ trend_nu_ts }}"
 
   - choose:
       - conditions:
