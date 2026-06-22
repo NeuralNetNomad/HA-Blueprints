@@ -1,557 +1,272 @@
 blueprint:
-  name: Temperature Comparison with Window Notification
+  name: Raamadvies bij hoge maximumtemperatuur
   description: >
-    Keep your home comfortable by comparing outdoor and indoor temperatures.
-    A summer mode activates when today's forecast temperature exceeds a set threshold.
-    When active, you receive advice to open or close the window based on whether it
-    is warmer or cooler outside than inside. Notifications are only sent when the
-    advice changes, or when the window is opened or closed while it should not be.
-    Notification texts can be sent in English, Dutch, German, Spanish, French or Italian.
+    Geeft advies (open/dicht) over een raam, gebaseerd op binnen- en
+    buitentemperatuur en de raamstatus, maar alleen op dagen waarop de
+    verwachte maximumtemperatuur boven een instelbare drempel ligt.
+    Het advies wordt eenmalig als notificatie gestuurd en alleen opnieuw
+    gestuurd als het advies wijzigt (geen herhaalmeldingen bij gelijk advies).
   domain: automation
+  source_url: https://github.com/
+
   input:
+    buiten_temperatuur_sensor:
+      name: Buitentemperatuur sensor
+      description: De sensor die de huidige buitentemperatuur meet.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
 
-    temperature_settings:
-      name: Temperature settings
-      icon: mdi:thermometer
-      collapsed: true
-      input:
-        notification_language:
-          name: Notification language
-          description: >
-            Choose the language for notification messages.
-          default: en
-          selector:
-            select:
-              options:
-                - label: English
-                  value: en
-                - label: Nederlands
-                  value: nl
-                - label: Deutsch
-                  value: de
-                - label: Español
-                  value: es
-                - label: Français
-                  value: fr
-                - label: Italiano
-                  value: it
-              custom_value: false
-              multiple: false
-              sort: false
+    binnen_temperatuur_sensor:
+      name: Binnentemperatuur sensor
+      description: De sensor die de huidige binnentemperatuur meet.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
 
-        room_name:
-          name: Room name
-          description: >
-            The name of the room this automation applies to,
-            e.g. 'Living room' or 'Bedroom'. Used in notifications.
-          default: "My room"
-          selector:
-            text:
+    max_temperatuur_vandaag_sensor:
+      name: Maximumtemperatuur van vandaag sensor
+      description: De sensor met de verwachte maximumtemperatuur voor vandaag.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
 
-        outdoor_temperature:
-          name: Outdoor temperature sensor
-          description: >
-            The sensor that measures the current outdoor temperature.
-          selector:
-            entity:
-              domain: sensor
-              device_class: temperature
+    raam_sensor:
+      name: Raamsensor
+      description: >
+        De binary sensor die aangeeft of het raam open of dicht is. Let op:
+        sommige raamsensoren (zoals IKEA MYGGBETT) gebruiken device_class
+        "door" in plaats van "window" - beide worden hier getoond.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class:
+            - window
+            - door
 
-        indoor_temperature:
-          name: Indoor temperature sensor
-          description: >
-            The sensor that measures the indoor temperature.
-          selector:
-            entity:
-              domain: sensor
-              device_class: temperature
+    drempel_max_temperatuur:
+      name: Drempelwaarde maximumtemperatuur
+      description: >
+        Alleen als de maximumtemperatuur van vandaag boven deze waarde komt,
+        wordt er advies gegeven.
+      default: 22
+      selector:
+        number:
+          min: 0
+          max: 40
+          step: 0.5
+          unit_of_measurement: "°C"
+          mode: box
 
-        state_helper:
-          name: Text helper for tracking the last advice
-          description: >
-            Create an input_text helper via Settings → Helpers → Add → Text.
-            This helper remembers the last advice so you only receive a notification
-            when the advice changes. Create a separate helper for each automation.
-          selector:
-            entity:
-              domain: input_text
+    trend_helper:
+      name: Trend-geheugen voor binnentemperatuur (input_text)
+      description: >
+        Maak eenmalig een tweede input_text helper aan (zelfde manier als
+        bij de geheugen-helper, type "Tekst", max lengte minimaal 50
+        tekens) en selecteer die hier. De blueprint gebruikt deze om zelf
+        bij te houden wat de binnentemperatuur was, zodat berekend kan
+        worden of de temperatuur de afgelopen periode is opgelopen. Gebruik
+        per raam een eigen helper (dus niet dezelfde als de geheugen-helper
+        en niet delen met een ander raam).
+      selector:
+        entity:
+          domain: input_text
 
-    summer_mode_settings:
-      name: Summer mode activation
-      icon: mdi:weather-sunny
-      collapsed: true
-      input:
-        forecast_sensor:
-          name: Today's expected maximum temperature sensor (optional)
-          description: >
-            Choose a sensor that provides today's expected maximum temperature,
-            e.g. sensor.buienradar_temperature_1d or sensor.openweathermap_forecast_max_temp.
-            Leave empty if you are using a helper instead.
-          default: []
-          selector:
-            entity:
-              domain: sensor
-              device_class: temperature
+    stijging_periode_minuten:
+      name: Periode voor temperatuurstijging (advies 1)
+      description: >
+        Aantal minuten waarover gekeken wordt of de binnentemperatuur is
+        opgelopen, voor advies 1 (raam open, binnen kouder dan buiten, maar
+        binnentemperatuur loopt op).
+      default: 15
+      selector:
+        number:
+          min: 5
+          max: 120
+          step: 5
+          unit_of_measurement: minuten
+          mode: box
 
-        forecast_helper:
-          name: Today's expected maximum temperature helper (optional)
-          description: >
-            Use an input_number helper as an alternative to the sensor.
-            Set the value manually each day, or let another automation do this.
-            Leave empty if you are using a sensor instead.
-          default: []
-          selector:
-            entity:
-              domain: input_number
+    notificatie_titel:
+      name: Titel van de melding
+      description: >
+        De titel die boven de melding wordt weergegeven.
+      default: "Raamadvies"
+      selector:
+        text:
 
-        minimum_temperature:
-          name: Minimum daily temperature for summer mode (°C)
-          description: >
-            Summer mode is active when today's expected maximum temperature
-            reaches or exceeds this value.
-          default: 20
-          selector:
-            number:
-              min: 15
-              max: 35
-              step: 0.5
-              unit_of_measurement: "°C"
-              mode: slider
+    notificatie_bericht:
+      name: Inhoud van de melding
+      description: >
+        De tekst van de melding. Gebruik {advies} op de plek waar het
+        berekende advies ("Het raam moet dicht." of "Het raam moet open.")
+        moet komen te staan.
+      default: "{advies}"
+      selector:
+        text:
 
-    window_settings:
-      name: Window settings
-      icon: mdi:window-open
-      collapsed: true
-      input:
-        window_sensor:
-          name: Window sensor (optional)
-          description: >
-            Choose a window or door sensor. Leave empty to skip.
-          default: []
-          selector:
-            entity:
-              domain: binary_sensor
-              device_class:
-                - window
-                - door
-                - opening
+    notificatie_apparaten:
+      name: Telefoons voor melding
+      description: >
+        Selecteer de mobiele apparaten (telefoons met de Home Assistant
+        Companion App) die de melding moeten ontvangen.
+      selector:
+        device:
+          filter:
+            integration: mobile_app
+          multiple: true
 
-        window_delay:
-          name: Delay after window state change (seconds)
-          description: >
-            How long to wait after the window is opened or closed before
-            sending a notification. Useful to avoid alerts when the window
-            is only briefly opened or closed. Set to 0 for no delay.
-          default: 0
-          selector:
-            number:
-              min: 0
-              max: 3600
-              step: 1
-              unit_of_measurement: "s"
-              mode: box
+    geheugen_helper:
+      name: Geheugen-helper (input_text)
+      description: >
+        Maak in Instellingen > Apparaten & Diensten > Helpers een nieuwe
+        helper aan van het type "Tekst" (input_text, max lengte minimaal 20
+        tekens) en selecteer die hier. Deze helper wordt door de blueprint
+        gebruikt om te onthouden welk advies het laatst is gegeven, zodat
+        je niet steeds opnieuw een melding krijgt voor hetzelfde advies.
+        Gebruik per raam een eigen helper.
+      selector:
+        entity:
+          domain: input_text
 
-    automation_settings:
-      name: Automation settings
-      icon: mdi:cog-outline
-      collapsed: true
-      input:
-        check_every:
-          name: Check interval
-          description: >
-            How often should the automation check?
-          default: /15
-          selector:
-            select:
-              options:
-                - label: Every 5 minutes
-                  value: /5
-                - label: Every 10 minutes
-                  value: /10
-                - label: Every 15 minutes
-                  value: /15
-                - label: Every 30 minutes
-                  value: /30
-                - label: Every hour
-                  value: /60
-              custom_value: false
-              multiple: false
-              sort: false
+    check_interval_minuten:
+      name: Controle-interval
+      description: >
+        Naast directe controle bij wijziging van een sensor, wordt ook op
+        dit vaste interval (in minuten) gecontroleerd of het advies nog
+        klopt.
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          unit_of_measurement: minuten
+          mode: box
 
-        notification_delay:
-          name: Notification delay (minutes)
-          description: >
-            How long to wait after a situation is detected before sending a
-            notification. This filters out brief or erroneous sensor readings.
-            Set to 0 to notify immediately.
-          default: 10
-          selector:
-            number:
-              min: 0
-              max: 60
-              step: 1
-              unit_of_measurement: "min"
-              mode: box
-
-    notification_settings:
-      name: Notification settings
-      icon: mdi:bell-check-outline
-      collapsed: true
-      input:
-        notification_enabled:
-          name: Enable notifications
-          description: >
-            Enable notifications to receive an alert on your devices
-            when the advice changes or the window is in the wrong position.
-          default: disable_notification
-          selector:
-            select:
-              options:
-                - label: Enable notifications
-                  value: enable_notification
-                - label: Disable notifications
-                  value: disable_notification
-              custom_value: false
-              multiple: false
-              sort: false
-
-        notification_devices:
-          name: Devices to notify
-          description: >
-            Select the devices that will receive a notification.
-            Only devices with the Home Assistant app are shown.
-          default: []
-          selector:
-            device:
-              filter:
-                - integration: mobile_app
-              multiple: true
-
-        notify_only_when_home:
-          name: Only notify when home
-          description: >
-            When enabled, a notification is only sent to a device if that device
-            or its associated person is currently home.
-          default: notify_always
-          selector:
-            select:
-              options:
-                - label: Always notify
-                  value: notify_always
-                - label: Only notify when home
-                  value: notify_when_home
-              custom_value: false
-              multiple: false
-              sort: false
-
-variables:
-  lang: !input notification_language
-  room_name: !input room_name
-  outdoor_sensor: !input outdoor_temperature
-  indoor_sensor: !input indoor_temperature
-  state_helper: !input state_helper
-  forecast_sensor: !input forecast_sensor
-  forecast_helper: !input forecast_helper
-  threshold: !input minimum_temperature
-  window: !input window_sensor
-  window_delay: !input window_delay
-  notification_delay: !input notification_delay
-  notification_on: !input notification_enabled
-  devices: !input notification_devices
-  notify_only_when_home: !input notify_only_when_home
-  outdoor_temp: "{{ states(outdoor_sensor) | float(0) | round(1) }}"
-  indoor_temp: "{{ states(indoor_sensor) | float(0) | round(1) }}"
-  outdoor_warmer: "{{ states(outdoor_sensor) | float(0) > states(indoor_sensor) | float(0) }}"
+mode: restart
+max_exceeded: silent
 
 trigger:
-  - id: time_trigger
-    platform: time_pattern
-    minutes: !input check_every
+  - platform: state
+    entity_id: !input buiten_temperatuur_sensor
+  - platform: state
+    entity_id: !input binnen_temperatuur_sensor
+  - platform: state
+    entity_id: !input max_temperatuur_vandaag_sensor
+  - platform: state
+    entity_id: !input raam_sensor
+  - platform: time_pattern
+    minutes: !input check_interval_minuten
 
-  - id: window_opened
-    platform: state
-    entity_id: !input window_sensor
-    to: "on"
+variables:
+  buiten_temperatuur_sensor: !input buiten_temperatuur_sensor
+  binnen_temperatuur_sensor: !input binnen_temperatuur_sensor
+  max_temperatuur_vandaag_sensor: !input max_temperatuur_vandaag_sensor
+  raam_sensor: !input raam_sensor
+  drempel_max_temperatuur: !input drempel_max_temperatuur
+  stijging_periode_minuten: !input stijging_periode_minuten
+  trend_helper: !input trend_helper
+  geheugen_helper: !input geheugen_helper
+  notificatie_titel: !input notificatie_titel
+  notificatie_bericht: !input notificatie_bericht
 
-  - id: window_closed
-    platform: state
-    entity_id: !input window_sensor
-    to: "off"
+  buiten_temp: "{{ states(buiten_temperatuur_sensor) | float(none) }}"
+  binnen_temp: "{{ states(binnen_temperatuur_sensor) | float(none) }}"
+  max_temp_vandaag: "{{ states(max_temperatuur_vandaag_sensor) | float(none) }}"
+  raam_open: "{{ is_state(raam_sensor, 'on') }}"
+
+  vorig_advies: "{{ states(geheugen_helper) | trim }}"
+
+  drempel_overschreden: >
+    {{ max_temp_vandaag is not none and max_temp_vandaag > drempel_max_temperatuur }}
+
+  geldige_metingen: >
+    {{ buiten_temp is not none and binnen_temp is not none }}
 
 condition:
-  # Summer mode: only active when today's forecast reaches the threshold
   - condition: template
-    value_template: >
-      {% if forecast_sensor | length > 0 %}
-        {{ states(forecast_sensor) | float(0) >= threshold }}
-      {% elif forecast_helper | length > 0 %}
-        {{ states(forecast_helper) | float(0) >= threshold }}
-      {% else %}
-        false
-      {% endif %}
+    value_template: "{{ drempel_overschreden and geldige_metingen }}"
 
 action:
-  # Wait before processing window trigger, so brief open/close events are ignored
-  - if:
-      - condition: template
-        value_template: "{{ trigger.id in ['window_opened', 'window_closed'] and window_delay | int(0) > 0 }}"
-    then:
-      - delay:
-          seconds: "{{ window_delay | int(0) }}"
-      # After the delay, abort if the window state has changed back to what it was
-      - if:
-          - condition: template
-            value_template: >
-              {% if trigger.id == 'window_opened' %}
-                {{ not is_state(window, 'on') }}
-              {% else %}
-                {{ not is_state(window, 'off') }}
-              {% endif %}
-        then:
-          - stop: "Window state changed back during delay, aborting"
-
   - variables:
-      window_open: >
-        {% if window | length > 0 %}
-          {{ is_state(window, 'on') }}
+      trend_opgeslagen: "{{ states(trend_helper) | trim }}"
+      trend_temp_oud: >
+        {{ trend_opgeslagen.split('|')[0] | float(none)
+           if '|' in trend_opgeslagen else none }}
+      trend_tijd_oud_ts: >
+        {{ trend_opgeslagen.split('|')[1] | float(none)
+           if '|' in trend_opgeslagen else none }}
+      trend_nu_ts: "{{ as_timestamp(now()) }}"
+      trend_leeftijd_minuten: >
+        {{ ((trend_nu_ts - trend_tijd_oud_ts) / 60)
+           if trend_tijd_oud_ts is not none else none }}
+      trend_geldig: >
+        {{ trend_temp_oud is not none and trend_leeftijd_minuten is not none
+           and trend_leeftijd_minuten >= stijging_periode_minuten }}
+
+      binnen_loopt_op: >
+        {{ trend_geldig and binnen_temp is not none
+           and binnen_temp > trend_temp_oud }}
+
+      nieuw_advies: >
+        {% if raam_open and binnen_temp < buiten_temp and binnen_loopt_op %}
+          raam_dicht_1
+        {% elif not raam_open and binnen_temp > buiten_temp %}
+          raam_open_2
+        {% elif raam_open and binnen_temp > buiten_temp %}
+          raam_open_3
+        {% elif not raam_open and binnen_temp < buiten_temp %}
+          raam_dicht_4
         {% else %}
-          false
+          geen_advies
         {% endif %}
+      nieuw_advies_clean: "{{ nieuw_advies | trim }}"
 
-      # -------------------------------------------------------
-      # Translations — all language strings defined here
-      # -------------------------------------------------------
-
-      # Labels: outdoor / indoor
-      t_outdoor: >
-        {% if lang == 'nl' %}Buiten
-        {% elif lang == 'de' %}Außen
-        {% elif lang == 'es' %}Exterior
-        {% elif lang == 'fr' %}Extérieur
-        {% elif lang == 'it' %}Esterno
-        {% else %}Outdoor{% endif %}
-      t_indoor: >
-        {% if lang == 'nl' %}Binnen
-        {% elif lang == 'de' %}Innen
-        {% elif lang == 'es' %}Interior
-        {% elif lang == 'fr' %}Intérieur
-        {% elif lang == 'it' %}Interno
-        {% else %}Indoor{% endif %}
-
-      # Window status
-      t_window_status_open: "{{ room_name + ': open' }}"
-      t_window_status_closed: >
-        {% if lang == 'nl' %}{{ room_name + ': gesloten' }}
-        {% elif lang == 'de' %}{{ room_name + ': geschlossen' }}
-        {% elif lang == 'es' %}{{ room_name + ': cerrado' }}
-        {% elif lang == 'fr' %}{{ room_name + ': fermée' }}
-        {% elif lang == 'it' %}{{ room_name + ': chiusa' }}
-        {% else %}{{ room_name + ': closed' }}{% endif %}
-
-      # Advice: warmer outside, window sensor present
-      t_advice_warmer_close: >
-        {% if lang == 'nl' %}Het is buiten warmer dan binnen. Doe het raam dicht om de warmte buiten te houden en de kamer koel te houden.
-        {% elif lang == 'de' %}Es ist draußen wärmer als drinnen. Schließe das Fenster, um die Wärme draußen zu halten und den Raum kühl zu halten.
-        {% elif lang == 'es' %}Hace más calor fuera que dentro. Cierra la ventana para mantener el calor fuera y la habitación fresca.
-        {% elif lang == 'fr' %}Il fait plus chaud dehors que dedans. Fermez la fenêtre pour garder la chaleur à l'extérieur et la pièce fraîche.
-        {% elif lang == 'it' %}Fa più caldo fuori che dentro. Chiudi la finestra per tenere il calore fuori e mantenere la stanza fresca.
-        {% else %}It is warmer outside than inside. Close the window to keep the heat out and the room cool.{% endif %}
-
-      # Advice: cooler outside, window sensor present
-      t_advice_cooler_open: >
-        {% if lang == 'nl' %}Het is buiten koeler dan binnen. Doe het raam open om de koele lucht binnen te laten en de kamer af te koelen.
-        {% elif lang == 'de' %}Es ist draußen kühler als drinnen. Öffne das Fenster, um die kühle Luft hereinzulassen und den Raum abzukühlen.
-        {% elif lang == 'es' %}Hace más frío fuera que dentro. Abre la ventana para dejar entrar el aire fresco y enfriar la habitación.
-        {% elif lang == 'fr' %}Il fait plus frais dehors que dedans. Ouvrez la fenêtre pour laisser entrer l'air frais et rafraîchir la pièce.
-        {% elif lang == 'it' %}Fa più fresco fuori che dentro. Apri la finestra per far entrare l'aria fresca e rinfrescare la stanza.
-        {% else %}It is cooler outside than inside. Open the window to let the cool air in and cool the room down.{% endif %}
-
-      # Advice: warmer outside, no window sensor
-      t_advice_warmer_no_sensor: >
-        {% if lang == 'nl' %}Het is buiten warmer dan binnen — is het raam al dicht?
-        {% elif lang == 'de' %}Es ist draußen wärmer als drinnen — ist das Fenster schon geschlossen?
-        {% elif lang == 'es' %}Hace más calor fuera que dentro — ¿ya está la ventana cerrada?
-        {% elif lang == 'fr' %}Il fait plus chaud dehors que dedans — la fenêtre est-elle déjà fermée?
-        {% elif lang == 'it' %}Fa più caldo fuori che dentro — la finestra è già chiusa?
-        {% else %}It is warmer outside than inside — is the window already closed?{% endif %}
-
-      # Advice: cooler outside, no window sensor
-      t_advice_cooler_no_sensor: >
-        {% if lang == 'nl' %}Het is buiten koeler dan binnen — is het raam al open?
-        {% elif lang == 'de' %}Es ist draußen kühler als drinnen — ist das Fenster schon geöffnet?
-        {% elif lang == 'es' %}Hace más frío fuera que dentro — ¿ya está la ventana abierta?
-        {% elif lang == 'fr' %}Il fait plus frais dehors que dedans — la fenêtre est-elle déjà ouverte?
-        {% elif lang == 'it' %}Fa più fresco fuori che dentro — la finestra è già aperta?
-        {% else %}It is cooler outside than inside — is the window already open?{% endif %}
-
-      # Title suffix: window opened
-      t_title_opened: >
-        {% if lang == 'nl' %}opengegaan — actie mogelijk nodig
-        {% elif lang == 'de' %}geöffnet — Maßnahme möglicherweise erforderlich
-        {% elif lang == 'es' %}abierta — puede ser necesario actuar
-        {% elif lang == 'fr' %}ouverte — une action peut être nécessaire
-        {% elif lang == 'it' %}aperta — potrebbe essere necessario intervenire
-        {% else %}opened — action may be needed{% endif %}
-
-      # Title suffix: window closed
-      t_title_closed: >
-        {% if lang == 'nl' %}dichtgegaan — actie mogelijk nodig
-        {% elif lang == 'de' %}geschlossen — Maßnahme möglicherweise erforderlich
-        {% elif lang == 'es' %}cerrada — puede ser necesario actuar
-        {% elif lang == 'fr' %}fermée — une action peut être nécessaire
-        {% elif lang == 'it' %}chiusa — potrebbe essere necessario intervenire
-        {% else %}closed — action may be needed{% endif %}
-
-      # Title suffix: periodic check
-      t_title_advice: >
-        {% if lang == 'nl' %}raamadvies
-        {% elif lang == 'de' %}Fensterempfehlung
-        {% elif lang == 'es' %}consejo de ventana
-        {% elif lang == 'fr' %}conseil de fenêtre
-        {% elif lang == 'it' %}consiglio finestra
-        {% else %}window advice{% endif %}
-
-      # -------------------------------------------------------
-      # Composed message variables
-      # -------------------------------------------------------
-
-      window_status_text: >
-        {% if window | length > 0 %}
-          {% if window_open %}{{ t_window_status_open }}
-          {% else %}{{ t_window_status_closed }}
-          {% endif %}
-        {% endif %}
-
-      advice_text: >
-        {% if window | length > 0 %}
-          {% if outdoor_warmer %}{{ t_advice_warmer_close }}
-          {% else %}{{ t_advice_cooler_open }}
-          {% endif %}
+      advies_tekst_raw: >
+        {% if nieuw_advies | trim in ['raam_dicht_1', 'raam_dicht_4'] %}
+          Het raam moet dicht.
+        {% elif nieuw_advies | trim in ['raam_open_2', 'raam_open_3'] %}
+          Het raam moet open.
         {% else %}
-          {% if outdoor_warmer %}{{ t_advice_warmer_no_sensor }}
-          {% else %}{{ t_advice_cooler_no_sensor }}
-          {% endif %}
+          ""
         {% endif %}
+      advies_tekst: "{{ advies_tekst_raw | trim }}"
 
-      message_title: >
-        {% if trigger.id == 'window_opened' %}{{ room_name }} {{ t_title_opened }}
-        {% elif trigger.id == 'window_closed' %}{{ room_name }} {{ t_title_closed }}
-        {% else %}{{ room_name }} — {{ t_title_advice }}
-        {% endif %}
-
-      message_body: >
-        {{ t_outdoor }}: {{ outdoor_temp }}°C | {{ t_indoor }}: {{ indoor_temp }}°C
-        {% if window | length > 0 %}
-        {{ window_status_text }}
-        {% endif %}
-        {{ advice_text }}
-
-  # Only check if advice has changed when triggered by timer (skip for window state changes)
-  - condition: template
-    value_template: >
-      {% if trigger.id == 'window_opened' or trigger.id == 'window_closed' %}
-        true
-      {% else %}
-        {% set current_advice %}{% if outdoor_warmer %}window_closed{% else %}window_open{% endif %}{% endset %}
-        {{ states(state_helper) != current_advice }}
-      {% endif %}
-
-  # No notification if the window is already in the desired position
-  - condition: template
-    value_template: >
-      {% if window | length > 0 %}
-        {% set window_is_open = is_state(window, 'on') %}
-        {% if outdoor_warmer %}
-          {{ window_is_open }}
-        {% else %}
-          {{ not window_is_open }}
-        {% endif %}
-      {% else %}
-        true
-      {% endif %}
-
-  - condition: template
-    value_template: "{{ notification_on == 'enable_notification' }}"
-
-  # Only apply the notification delay for the time trigger (temperature change detection).
-  # Window triggers bypass this delay and notify immediately after the window_delay.
-  - if:
-      - condition: template
-        value_template: "{{ trigger.id == 'time_trigger' and notification_delay | int(0) > 0 }}"
-    then:
-      - delay:
-          minutes: "{{ notification_delay | int(0) }}"
-      # Re-check: abort if the temperature situation has reversed during the wait
-      - if:
+  - choose:
+      - conditions:
           - condition: template
             value_template: >
-              {{ (states(outdoor_sensor) | float(0) > states(indoor_sensor) | float(0)) != outdoor_warmer }}
-        then:
-          - stop: "Temperature situation reversed during notification delay, aborting"
-      # Re-check: abort if the window is now already in the desired position
-      - if:
+              {{ binnen_temp is not none
+                 and (trend_temp_oud is none or trend_geldig) }}
+        sequence:
+          - action: input_text.set_value
+            target:
+              entity_id: "{{ trend_helper }}"
+            data:
+              value: "{{ binnen_temp }}|{{ trend_nu_ts }}"
+
+  - choose:
+      - conditions:
           - condition: template
             value_template: >
-              {% if window | length > 0 %}
-                {% set window_is_open = is_state(window, 'on') %}
-                {% if outdoor_warmer %}
-                  {{ not window_is_open }}
-                {% else %}
-                  {{ window_is_open }}
-                {% endif %}
-              {% else %}
-                false
-              {% endif %}
-        then:
-          - stop: "Window already in desired position after notification delay, aborting"
+              {{ nieuw_advies_clean != 'geen_advies' and nieuw_advies_clean != vorig_advies }}
+        sequence:
+          - action: input_text.set_value
+            target:
+              entity_id: "{{ geheugen_helper }}"
+            data:
+              value: "{{ nieuw_advies_clean }}"
 
-  - repeat:
-      for_each: "{{ devices }}"
-      sequence:
-        - variables:
-            notify_service: >
-              {{ 'notify.mobile_app_' ~ device_attr(repeat.item, 'name')
-                  | lower | replace(' ', '_') }}
-            device_is_home: >
-              {% if notify_only_when_home == 'notify_when_home' %}
-                {% set dev_id = repeat.item %}
-                {% set person_home = namespace(found=false) %}
-                {% for person in states.person %}
-                  {% if device_attr(dev_id, 'id') in (person.attributes.device_trackers | default([])) %}
-                    {% if person.state == 'home' %}
-                      {% set person_home.found = true %}
-                    {% endif %}
-                  {% endif %}
-                {% endfor %}
-                {% if person_home.found %}
-                  true
-                {% else %}
-                  {% set tracker = device_entities(dev_id)
-                      | select('match', 'device_tracker\\..*')
-                      | list %}
-                  {% if tracker | length > 0 %}
-                    {{ is_state(tracker[0], 'home') }}
-                  {% else %}
-                    false
-                  {% endif %}
-                {% endif %}
-              {% else %}
-                true
-              {% endif %}
-        - condition: template
-          value_template: "{{ device_is_home }}"
-        - service: "{{ notify_service }}"
-          data:
-            title: "{{ message_title }}"
-            message: "{{ message_body }}"
-
-  # Save the current advice to the helper
-  - service: input_text.set_value
-    target:
-      entity_id: "{{ state_helper }}"
-    data:
-      value: "{% if outdoor_warmer %}window_closed{% else %}window_open{% endif %}"
-
-mode: queued
-max_exceeded: silent
-max: 10
+          - repeat:
+              for_each: !input notificatie_apparaten
+              sequence:
+                - action: notify.send_message
+                  target:
+                    device_id: "{{ repeat.item }}"
+                  data:
+                    title: "{{ notificatie_titel | replace('{advies}', advies_tekst) }}"
+                    message: "{{ notificatie_bericht | replace('{advies}', advies_tekst) }}"
