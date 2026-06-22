@@ -226,10 +226,20 @@ action:
         {% endif %}
       nieuw_advies_clean: "{{ nieuw_advies | trim }}"
 
+      advies_conclusie: >
+        {% if nieuw_advies_clean in ['raam_dicht_1', 'raam_dicht_4'] %}
+          raam_dicht
+        {% elif nieuw_advies_clean in ['raam_open_2', 'raam_open_3'] %}
+          raam_open
+        {% else %}
+          geen_advies
+        {% endif %}
+      advies_conclusie_clean: "{{ advies_conclusie | trim }}"
+
       advies_tekst_raw: >
-        {% if nieuw_advies | trim in ['raam_dicht_1', 'raam_dicht_4'] %}
+        {% if advies_conclusie_clean == 'raam_dicht' %}
           Het raam moet dicht.
-        {% elif nieuw_advies | trim in ['raam_open_2', 'raam_open_3'] %}
+        {% elif advies_conclusie_clean == 'raam_open' %}
           Het raam moet open.
         {% else %}
           ""
@@ -253,13 +263,13 @@ action:
       - conditions:
           - condition: template
             value_template: >
-              {{ nieuw_advies_clean != 'geen_advies' and nieuw_advies_clean != vorig_advies }}
+              {{ advies_conclusie_clean != 'geen_advies' and advies_conclusie_clean != vorig_advies }}
         sequence:
           - action: input_text.set_value
             target:
               entity_id: "{{ geheugen_helper }}"
             data:
-              value: "{{ nieuw_advies_clean }}"
+              value: "{{ advies_conclusie_clean }}"
 
           - repeat:
               for_each: !input notificatie_apparaten
