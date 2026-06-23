@@ -251,7 +251,8 @@ action:
           - condition: template
             value_template: >
               {{ binnen_temp is not none
-                 and (trend_temp_oud is none or trend_geldig) }}
+                 and (trend_temp_oud is none or trend_tijd_oud_ts is none
+                      or trend_geldig) }}
         sequence:
           - action: input_text.set_value
             target:
