@@ -123,11 +123,13 @@ blueprint:
       name: Geheugen-helper (input_text)
       description: >
         Maak in Instellingen > Apparaten & Diensten > Helpers een nieuwe
-        helper aan van het type "Tekst" (input_text, max lengte minimaal 20
+        helper aan van het type "Tekst" (input_text, max lengte minimaal 50
         tekens) en selecteer die hier. Deze helper wordt door de blueprint
-        gebruikt om te onthouden welk advies het laatst is gegeven, zodat
-        je niet steeds opnieuw een melding krijgt voor hetzelfde advies.
-        Gebruik per raam een eigen helper.
+        gebruikt om te onthouden welk advies het laatst is gegeven en
+        wanneer de laatste melding is verstuurd, zodat je niet steeds
+        opnieuw een melding krijgt voor hetzelfde advies en de stille
+        periode na een melding gerespecteerd wordt. Gebruik per raam een
+        eigen helper.
       selector:
         entity:
           domain: input_text
@@ -144,6 +146,21 @@ blueprint:
           min: 1
           max: 60
           step: 1
+          unit_of_measurement: minuten
+          mode: box
+
+    cooldown_minuten:
+      name: Stille periode na een melding
+      description: >
+        Nadat het advies is gewijzigd en er een melding is verstuurd, wordt
+        gedurende deze periode geen nieuwe melding meer gestuurd, zelfs niet
+        als het advies in die periode nog een keer verandert.
+      default: 60
+      selector:
+        number:
+          min: 0
+          max: 240
+          step: 5
           unit_of_measurement: minuten
           mode: box
 
@@ -173,13 +190,20 @@ variables:
   geheugen_helper: !input geheugen_helper
   notificatie_titel: !input notificatie_titel
   notificatie_bericht: !input notificatie_bericht
+  cooldown_minuten: !input cooldown_minuten
 
   buiten_temp: "{{ states(buiten_temperatuur_sensor) | float(none) }}"
   binnen_temp: "{{ states(binnen_temperatuur_sensor) | float(none) }}"
   max_temp_vandaag: "{{ states(max_temperatuur_vandaag_sensor) | float(none) }}"
   raam_open: "{{ is_state(raam_sensor, 'on') }}"
 
-  vorig_advies: "{{ states(geheugen_helper) | trim }}"
+  geheugen_opgeslagen: "{{ states(geheugen_helper) | trim }}"
+  vorig_advies: >
+    {{ geheugen_opgeslagen.split('|')[0]
+       if '|' in geheugen_opgeslagen else geheugen_opgeslagen }}
+  laatste_melding_ts: >
+    {{ geheugen_opgeslagen.split('|')[1] | float(none)
+       if '|' in geheugen_opgeslagen else none }}
 
   drempel_overschreden: >
     {{ max_temp_vandaag is not none and max_temp_vandaag > drempel_max_temperatuur }}
@@ -212,27 +236,21 @@ action:
         {{ trend_geldig and binnen_temp is not none
            and binnen_temp > trend_temp_oud }}
 
-      nieuw_advies: >
-        {% if raam_open and binnen_temp < buiten_temp and binnen_loopt_op %}
-          raam_dicht_1
-        {% elif not raam_open and binnen_temp > buiten_temp %}
-          raam_open_2
-        {% elif raam_open and binnen_temp > buiten_temp %}
-          raam_open_3
-        {% elif not raam_open and binnen_temp < buiten_temp %}
-          raam_dicht_4
-        {% else %}
-          geen_advies
-        {% endif %}
-      nieuw_advies_clean: "{{ nieuw_advies | trim }}"
+      binnen_warmer: "{{ binnen_temp > buiten_temp }}"
 
       advies_conclusie: >
-        {% if nieuw_advies_clean in ['raam_dicht_1', 'raam_dicht_4'] %}
-          raam_dicht
-        {% elif nieuw_advies_clean in ['raam_open_2', 'raam_open_3'] %}
-          raam_open
+        {% if raam_open %}
+          {% if binnen_warmer and not binnen_loopt_op %}
+            raam_open
+          {% else %}
+            raam_dicht
+          {% endif %}
         {% else %}
-          geen_advies
+          {% if binnen_warmer %}
+            raam_open
+          {% else %}
+            raam_dicht
+          {% endif %}
         {% endif %}
       advies_conclusie_clean: "{{ advies_conclusie | trim }}"
 
@@ -245,6 +263,11 @@ action:
           ""
         {% endif %}
       advies_tekst: "{{ advies_tekst_raw | trim }}"
+
+      advies_gewijzigd: "{{ advies_conclusie_clean != vorig_advies }}"
+      cooldown_actief: >
+        {{ laatste_melding_ts is not none
+           and ((trend_nu_ts - laatste_melding_ts) / 60) < cooldown_minuten }}
 
   - choose:
       - conditions:
@@ -263,14 +286,23 @@ action:
   - choose:
       - conditions:
           - condition: template
-            value_template: >
-              {{ advies_conclusie_clean != 'geen_advies' and advies_conclusie_clean != vorig_advies }}
+            value_template: "{{ advies_gewijzigd and cooldown_actief }}"
         sequence:
           - action: input_text.set_value
             target:
               entity_id: "{{ geheugen_helper }}"
             data:
-              value: "{{ advies_conclusie_clean }}"
+              value: "{{ advies_conclusie_clean }}|{{ laatste_melding_ts }}"
+
+      - conditions:
+          - condition: template
+            value_template: "{{ advies_gewijzigd and not cooldown_actief }}"
+        sequence:
+          - action: input_text.set_value
+            target:
+              entity_id: "{{ geheugen_helper }}"
+            data:
+              value: "{{ advies_conclusie_clean }}|{{ trend_nu_ts }}"
 
           - repeat:
               for_each: !input notificatie_apparaten
