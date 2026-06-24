@@ -2,10 +2,13 @@ blueprint:
   name: Raamadvies bij hoge maximumtemperatuur
   description: >
     Geeft advies (open/dicht) over een raam, gebaseerd op binnen- en
-    buitentemperatuur en de raamstatus, maar alleen op dagen waarop de
-    verwachte maximumtemperatuur boven een instelbare drempel ligt.
-    Het advies wordt eenmalig als notificatie gestuurd en alleen opnieuw
-    gestuurd als het advies wijzigt (geen herhaalmeldingen bij gelijk advies).
+    buitentemperatuur, raamstatus en of de binnentemperatuur oploopt, maar
+    alleen op dagen waarop de verwachte maximumtemperatuur boven een
+    instelbare drempel ligt. Er wordt alleen een melding gestuurd als het
+    advies afwijkt van de huidige raamstatus (dus geen melding "raam moet
+    dicht" als het raam al dicht is). Na een melding volgt een instelbare
+    stille periode waarin geen nieuwe melding wordt gestuurd, ook niet als
+    het advies in die periode verandert.
   domain: automation
   source_url: https://github.com/
 
@@ -264,6 +267,10 @@ action:
         {% endif %}
       advies_tekst: "{{ advies_tekst_raw | trim }}"
 
+      actie_nodig: >
+        {{ (advies_conclusie_clean == 'raam_dicht' and raam_open)
+           or (advies_conclusie_clean == 'raam_open' and not raam_open) }}
+
       advies_gewijzigd: "{{ advies_conclusie_clean != vorig_advies }}"
       cooldown_actief: >
         {{ laatste_melding_ts is not none
@@ -286,17 +293,18 @@ action:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ advies_gewijzigd and cooldown_actief }}"
+            value_template: "{{ advies_gewijzigd and (cooldown_actief or not actie_nodig) }}"
         sequence:
           - action: input_text.set_value
             target:
               entity_id: "{{ geheugen_helper }}"
             data:
-              value: "{{ advies_conclusie_clean }}|{{ laatste_melding_ts }}"
+              value: >
+                {{ advies_conclusie_clean }}|{{ laatste_melding_ts if laatste_melding_ts is not none else 0 }}
 
       - conditions:
           - condition: template
-            value_template: "{{ advies_gewijzigd and not cooldown_actief }}"
+            value_template: "{{ advies_gewijzigd and actie_nodig and not cooldown_actief }}"
         sequence:
           - action: input_text.set_value
             target:
