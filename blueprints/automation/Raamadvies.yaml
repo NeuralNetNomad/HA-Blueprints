@@ -1,0 +1,227 @@
+blueprint:
+  name: Raamadvies
+  description: >
+    Geeft advies om het raam open of dicht te doen, gebaseerd op het verschil
+    tussen de binnen- en buitentemperatuur, met als doel het huis zo koel
+    mogelijk te houden.
+
+
+    **Logica**
+
+    - Als de buitentemperatuur boven de ingestelde drempel is (standaard 20°C)
+      én het is binnen koeler dan buiten → advies: raam dicht houden (koelte
+      vasthouden).
+
+    - Als het binnen warmer is dan buiten → advies: raam open doen
+      (ventileren met koelere buitenlucht).
+
+    - Er wordt alleen een melding gestuurd als het advies wijzigt én de
+      raam/deursensor (indien gekoppeld) nog niet in de gewenste stand staat.
+
+    - Als de raam/deursensor van stand wisselt terwijl dat tegen het huidige
+      advies ingaat, krijg je een losse waarschuwing.
+
+
+    **Vereiste helper**
+
+    Deze blueprint heeft een `input_text` helper nodig om het laatste advies
+    in te onthouden tussen herstarts/herladingen door. Maak deze eenmalig aan
+    via Instellingen → Apparaten & diensten → Helpers → Tekst, bijvoorbeeld
+    genaamd `Raamadvies woonkamer`. Selecteer deze helper hieronder bij
+    "Advies-opslag (input_text helper)". Per ruimte/automatisering heb je een
+    eigen helper nodig.
+
+  domain: automation
+  source_url: https://github.com/
+
+  input:
+    buiten_temp_sensor:
+      name: Buitentemperatuur sensor
+      description: Sensor die de buitentemperatuur meet (bv. OpenWeatherMap of een lokale sensor).
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+
+    binnen_temp_sensor:
+      name: Binnentemperatuur sensor
+      description: Sensor die de binnentemperatuur meet.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+
+    raam_sensor:
+      name: Raam/deursensor (optioneel)
+      description: >
+        Optionele binary_sensor die aangeeft of het raam/deur open of dicht is
+        (bv. een IKEA MYGGBETT contactsensor). Als deze niet wordt ingesteld,
+        wordt altijd gemeld zodra het advies wijzigt, zonder rekening te
+        houden met de werkelijke raamstand.
+      default: ""
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: [door, window, opening, garage_door]
+          multiple: false
+
+    advies_opslag:
+      name: Advies-opslag (input_text helper)
+      description: >
+        Een input_text helper waarin het laatste advies wordt opgeslagen
+        (waarde: "raam_open" of "raam_dicht"). Maak deze handmatig aan onder
+        Instellingen → Helpers → Tekst voordat je deze blueprint gebruikt.
+      selector:
+        entity:
+          domain: input_text
+
+    drempel_temp:
+      name: Drempelwaarde buitentemperatuur
+      description: >
+        Vanaf welke buitentemperatuur (°C) "raam dicht houden" als advies
+        geldt, mits het binnen koeler is dan buiten.
+      default: 20
+      selector:
+        number:
+          min: 10
+          max: 35
+          step: 0.5
+          unit_of_measurement: "°C"
+          mode: box
+
+    min_verschil:
+      name: Minimaal temperatuurverschil
+      description: >
+        Minimaal verschil (°C) tussen binnen en buiten voordat er een advies
+        wordt gegeven. Voorkomt meldingen bij een verwaarloosbaar verschil.
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 0.1
+          unit_of_measurement: "°C"
+          mode: box
+
+    notify_device:
+      name: Apparaat voor melding
+      description: Het mobiele apparaat dat de melding moet ontvangen.
+      selector:
+        device:
+          integration: mobile_app
+
+    raam_naam:
+      name: Naam van het raam/de ruimte
+      description: Wordt gebruikt in de meldingstekst, bv. "woonkamer" of "slaapkamer raam".
+      default: "raam"
+      selector:
+        text:
+
+mode: queued
+max: 10
+max_exceeded: silent
+
+trigger:
+  - id: temperatuur_wijziging
+    platform: state
+    entity_id: !input buiten_temp_sensor
+  - id: temperatuur_wijziging
+    platform: state
+    entity_id: !input binnen_temp_sensor
+  - id: raam_wijziging
+    platform: state
+    entity_id: !input raam_sensor
+
+variables:
+  raam_sensor: !input raam_sensor
+  advies_opslag: !input advies_opslag
+  drempel_temp: !input drempel_temp
+  min_verschil: !input min_verschil
+  raam_naam: !input raam_naam
+  notify_device_id: !input notify_device
+  buiten_temp: "{{ states(!input buiten_temp_sensor) | float(none) }}"
+  binnen_temp: "{{ states(!input binnen_temp_sensor) | float(none) }}"
+  verschil: "{{ (binnen_temp - buiten_temp) if buiten_temp is not none and binnen_temp is not none else none }}"
+  huidig_advies: "{{ states(advies_opslag) }}"
+  nieuw_advies: >-
+    {%- if verschil is none -%}
+      geen_advies
+    {%- elif buiten_temp >= drempel_temp and verschil < (-1 * min_verschil) -%}
+      raam_dicht
+    {%- elif verschil > min_verschil -%}
+      raam_open
+    {%- else -%}
+      geen_advies
+    {%- endif -%}
+
+condition:
+  - condition: template
+    value_template: "{{ verschil is not none }}"
+
+action:
+  - choose:
+      # --- Tak 1: temperatuur is gewijzigd en het advies verandert ---
+      - conditions:
+          - condition: trigger
+            id: temperatuur_wijziging
+          - condition: template
+            value_template: "{{ nieuw_advies in ['raam_open', 'raam_dicht'] }}"
+          - condition: template
+            value_template: "{{ nieuw_advies != huidig_advies }}"
+        sequence:
+          - service: input_text.set_value
+            target:
+              entity_id: !input advies_opslag
+            data:
+              value: "{{ nieuw_advies }}"
+          - choose:
+              # Alleen melden als er geen raamsensor is, of als de raamstand
+              # nog niet overeenkomt met het nieuwe advies.
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ raam_sensor == ''
+                         or (nieuw_advies == 'raam_dicht' and is_state(raam_sensor, 'on'))
+                         or (nieuw_advies == 'raam_open' and is_state(raam_sensor, 'off')) }}
+                sequence:
+                  - service: notify.mobile_app
+                    target:
+                      device_id: "{{ notify_device_id }}"
+                    data:
+                      title: "Raamadvies: {{ raam_naam }}"
+                      message: >
+                        {% if nieuw_advies == 'raam_dicht' %}
+                          Het is buiten {{ buiten_temp }}°C en binnen {{ binnen_temp }}°C.
+                          Doe het {{ raam_naam }} dicht om de koelte binnen te houden.
+                        {% else %}
+                          Het is binnen {{ binnen_temp }}°C en buiten {{ buiten_temp }}°C.
+                          Zet het {{ raam_naam }} open om te ventileren met koelere buitenlucht.
+                        {% endif %}
+
+      # --- Tak 2: de raamsensor is gewijzigd, check of dit tegen het advies ingaat ---
+      - conditions:
+          - condition: trigger
+            id: raam_wijziging
+          - condition: template
+            value_template: "{{ huidig_advies in ['raam_open', 'raam_dicht'] }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: >
+                      {{ (huidig_advies == 'raam_dicht' and is_state(raam_sensor, 'on'))
+                         or (huidig_advies == 'raam_open' and is_state(raam_sensor, 'off')) }}
+                sequence:
+                  - service: notify.mobile_app
+                    target:
+                      device_id: "{{ notify_device_id }}"
+                    data:
+                      title: "Let op: {{ raam_naam }}"
+                      message: >
+                        {% if is_state(raam_sensor, 'on') %}
+                          Het {{ raam_naam }} is net open gegaan, maar het advies was om
+                          het dicht te houden (buiten {{ buiten_temp }}°C, binnen {{ binnen_temp }}°C).
+                        {% else %}
+                          Het {{ raam_naam }} is net dicht gegaan, maar het advies was om
+                          het open te zetten (binnen {{ binnen_temp }}°C, buiten {{ buiten_temp }}°C).
+                        {% endif %}
