@@ -1,5 +1,5 @@
 blueprint:
-  name: Raamadvies
+  name: Koel Huis - Raamadvies (binnen/buiten temperatuur)
   description: >
     Geeft advies om het raam open of dicht te doen, gebaseerd op het verschil
     tussen de binnen- en buitentemperatuur, met als doel het huis zo koel
@@ -139,8 +139,10 @@ variables:
   min_verschil: !input min_verschil
   raam_naam: !input raam_naam
   notify_device_id: !input notify_device
-  buiten_temp: "{{ states(!input buiten_temp_sensor) | float(none) }}"
-  binnen_temp: "{{ states(!input binnen_temp_sensor) | float(none) }}"
+  buiten_temp_entity: !input buiten_temp_sensor
+  binnen_temp_entity: !input binnen_temp_sensor
+  buiten_temp: "{{ states(buiten_temp_entity) | float(none) }}"
+  binnen_temp: "{{ states(binnen_temp_entity) | float(none) }}"
   verschil: "{{ (binnen_temp - buiten_temp) if buiten_temp is not none and binnen_temp is not none else none }}"
   huidig_advies: "{{ states(advies_opslag) }}"
   nieuw_advies: >-
