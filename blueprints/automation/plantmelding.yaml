@@ -3,9 +3,7 @@ blueprint:
   description: >
     Kies een plant uit de Plant Monitor-integratie (Olen/homeassistant-plant).
     De blueprint gebruikt automatisch de min- en max-bodemvochtigheid die je
-    al voor die plant hebt ingesteld: te droog geeft een waarschuwing, te nat
-    geeft een melding. Er is geen extra drempel nodig — die staat al op de
-    plant zelf.
+    al voor die plant hebt ingesteld.
   domain: automation
   source_url: https://github.com/Olen/homeassistant-plant
   input:
@@ -13,69 +11,78 @@ blueprint:
       name: Plant
       description: >
         De plant-entiteit uit de Plant Monitor-integratie (bijv. plant.rozenstruik).
-        Dit is dezelfde plant als het device dat je bij Instellingen →
-        Apparaten & services → Plant Monitor ziet staan.
       selector:
         entity:
           domain: plant
 
-    notify_device:
-      name: Telefoon voor melding
-      description: Het apparaat dat de melding moet ontvangen.
+    notify_devices:
+      name: Telefoons voor melding
+      description: Kies één of meerdere telefoons om de melding te ontvangen.
       selector:
         device:
           integration: mobile_app
+          multiple: true
 
 variables:
   plant_entity: !input plant_entity
   plant_name: "{{ state_attr(plant_entity, 'friendly_name') }}"
-  plant_slug: "{{ plant_entity.split('.')[1] }}"
-  moisture_now: "{{ state_attr(plant_entity, 'moisture') }}"
-  min_moisture: "{{ states('number.' ~ plant_slug ~ '_min_soil_moisture') }}"
-  max_moisture: "{{ states('number.' ~ plant_slug ~ '_max_soil_moisture') }}"
+  
+  # We zoeken in het 'problems' attribuut naar het probleem met 'sensor_type' = 'moisture'
+  # en halen daar direct de huidige waarde, het minimum en het maximum uit.
+  moisture_now: >
+    {% set m = (state_attr(plant_entity, 'problems') or []) | selectattr('sensor_type', 'eq', 'moisture') | list %}
+    {{ m[0].current if m else 'onbekend' }}
+  min_moisture: >
+    {% set m = (state_attr(plant_entity, 'problems') or []) | selectattr('sensor_type', 'eq', 'moisture') | list %}
+    {{ m[0].min if m else 'onbekend' }}
+  max_moisture: >
+    {% set m = (state_attr(plant_entity, 'problems') or []) | selectattr('sensor_type', 'eq', 'moisture') | list %}
+    {{ m[0].max if m else 'onbekend' }}
 
 trigger:
   - platform: state
     entity_id: !input plant_entity
     attribute: moisture_status
-    to: "Low"
+    to: "low"
     id: droog
   - platform: state
     entity_id: !input plant_entity
     attribute: moisture_status
-    to: "High"
+    to: "high"
     id: nat
 
 condition: []
 
 action:
   - choose:
-      # Te droog -> waarschuwing dat er water nodig is
+      # Te droog
       - conditions:
           - condition: trigger
             id: droog
         sequence:
-          - domain: mobile_app
-            type: notify
-            device_id: !input notify_device
-            title: "{{ plant_name }} heeft dorst."
-            message: >
-              De bodemvochtigheid van {{ plant_name }} is {{ moisture_now }}%,
-              dat is onder de ingestelde ondergrens van {{ min_moisture }}%.
-              Tijd om water te geven!
+          - action: notify.send_message
+            target:
+              device_id: !input notify_devices
+            data:
+              title: "{{ plant_name }} heeft dorst."
+              message: >
+                De bodemvochtigheid van {{ plant_name }} is {{ moisture_now }}%,
+                dat is onder de ingestelde ondergrens van {{ min_moisture }}%.
+                Tijd om water te geven!
 
-      # Te nat -> melding dat er te veel water is
+      # Te nat
       - conditions:
           - condition: trigger
             id: nat
         sequence:
-          - domain: mobile_app
-            type: notify
-            device_id: !input notify_device
-            title: "{{ plant_name }} verzuipt."
-            message: >
-              De bodemvochtigheid van {{ plant_name }} is {{ moisture_now }}%,
-              dat is boven de ingestelde bovengrens van {{ max_moisture }}%.
-              Even geen water geven en de pot laten uitlekken/drogen.
+          - action: notify.send_message
+            target:
+              device_id: !input notify_devices
+            data:
+              title: "{{ plant_name }} verzuipt."
+              message: >
+                De bodemvochtigheid van {{ plant_name }} is {{ moisture_now }}%,
+                dat is boven de ingestelde bovengrens van {{ max_moisture }}%.
+                Even geen water geven en de pot laten uitlekken/drogen.
 
 mode: single
