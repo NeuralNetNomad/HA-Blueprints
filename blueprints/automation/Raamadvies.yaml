@@ -195,10 +195,10 @@ action:
                       title: "Raamadvies: {{ raam_naam }}"
                       message: >
                         {% if nieuw_advies == 'raam_dicht' %}
-                          Het is buiten {{ buiten_temp }}°C en binnen {{ binnen_temp }}°C.
+                          Het is buiten {{ buiten_temp | round(1) }}°C en binnen {{ binnen_temp | round(1) }}°C.
                           Doe het {{ raam_naam }} dicht om de koelte binnen te houden.
                         {% else %}
-                          Het is binnen {{ binnen_temp }}°C en buiten {{ buiten_temp }}°C.
+                          Het is binnen {{ binnen_temp | round(1) }}°C en buiten {{ buiten_temp | round(1) }}°C.
                           Zet het {{ raam_naam }} open om te ventileren met koelere buitenlucht.
                         {% endif %}
 
@@ -224,8 +224,8 @@ action:
                       message: >
                         {% if is_state(raam_sensor, 'on') %}
                           Het {{ raam_naam }} is net open gegaan, maar het advies was om
-                          het dicht te houden (buiten {{ buiten_temp }}°C, binnen {{ binnen_temp }}°C).
+                          het dicht te houden (buiten {{ buiten_temp | round(1) }}°C, binnen {{ binnen_temp | round(1) }}°C).
                         {% else %}
                           Het {{ raam_naam }} is net dicht gegaan, maar het advies was om
-                          het open te zetten (binnen {{ binnen_temp }}°C, buiten {{ buiten_temp }}°C).
+                          het open te zetten (binnen {{ binnen_temp | round(1) }}°C, buiten {{ buiten_temp | round(1) }}°C).
                         {% endif %}
