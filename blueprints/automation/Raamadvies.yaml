@@ -196,10 +196,10 @@ action:
                       message: >
                         {% if nieuw_advies == 'raam_dicht' %}
                           Het is buiten {{ buiten_temp | round(1) }}°C en binnen {{ binnen_temp | round(1) }}°C.
-                          Doe het {{ raam_naam }} dicht om de koelte binnen te houden.
+                          Doe het raam dicht om de koelte binnen te houden.
                         {% else %}
                           Het is binnen {{ binnen_temp | round(1) }}°C en buiten {{ buiten_temp | round(1) }}°C.
-                          Zet het {{ raam_naam }} open om te ventileren met koelere buitenlucht.
+                          Zet het raam open om te ventileren met koelere buitenlucht.
                         {% endif %}
 
       # --- Tak 2: de raamsensor is gewijzigd, check of dit tegen het advies ingaat ---
