@@ -223,9 +223,9 @@ action:
                       title: "Let op: {{ raam_naam }}"
                       message: >
                         {% if is_state(raam_sensor, 'on') %}
-                          Het {{ raam_naam }} is net open gegaan, maar het advies was om
+                          Het raam in de {{ raam_naam }} is net open gegaan, maar het advies was om
                           het dicht te houden (buiten {{ buiten_temp | round(1) }}°C, binnen {{ binnen_temp | round(1) }}°C).
                         {% else %}
-                          Het {{ raam_naam }} is net dicht gegaan, maar het advies was om
+                          Het raam in de {{ raam_naam }} is net dicht gegaan, maar het advies was om
                           het open te zetten (binnen {{ binnen_temp | round(1) }}°C, buiten {{ buiten_temp | round(1) }}°C).
                         {% endif %}
