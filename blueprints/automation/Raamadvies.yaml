@@ -1,5 +1,5 @@
 blueprint:
-  name: Koel Huis - Raamadvies (binnen/buiten temperatuur)
+  name: Raamadvies (binnen/buiten temperatuur)
   description: >
     Geeft advies om het raam open of dicht te doen, gebaseerd op het verschil
     tussen de binnen- en buitentemperatuur, met als doel het huis zo koel
@@ -103,12 +103,15 @@ blueprint:
           unit_of_measurement: "°C"
           mode: box
 
-    notify_device:
-      name: Apparaat voor melding
-      description: Het mobiele apparaat dat de melding moet ontvangen.
+    notify_entities:
+      name: Apparaat/Apparaten voor melding
+      description: >
+        Selecteer hier één of meerdere notify-entiteiten van de mobiele apparaten 
+        die de melding moeten ontvangen (bijv. notify.mobile_app_telefoon).
       selector:
-        device:
-          integration: mobile_app
+        entity:
+          domain: notify
+          multiple: true
 
     raam_naam:
       name: Naam van het raam/de ruimte
@@ -138,7 +141,6 @@ variables:
   drempel_temp: !input drempel_temp
   min_verschil: !input min_verschil
   raam_naam: !input raam_naam
-  notify_device_id: !input notify_device
   buiten_temp_entity: !input buiten_temp_sensor
   binnen_temp_entity: !input binnen_temp_sensor
   buiten_temp: "{{ states(buiten_temp_entity) | float(none) }}"
@@ -186,9 +188,9 @@ action:
                          or (nieuw_advies == 'raam_dicht' and is_state(raam_sensor, 'on'))
                          or (nieuw_advies == 'raam_open' and is_state(raam_sensor, 'off')) }}
                 sequence:
-                  - service: notify.mobile_app
+                  - service: notify.send_message
                     target:
-                      device_id: "{{ notify_device_id }}"
+                      entity_id: !input notify_entities
                     data:
                       title: "Raamadvies: {{ raam_naam }}"
                       message: >
@@ -214,9 +216,9 @@ action:
                       {{ (huidig_advies == 'raam_dicht' and is_state(raam_sensor, 'on'))
                          or (huidig_advies == 'raam_open' and is_state(raam_sensor, 'off')) }}
                 sequence:
-                  - service: notify.mobile_app
+                  - service: notify.send_message
                     target:
-                      device_id: "{{ notify_device_id }}"
+                      entity_id: !input notify_entities
                     data:
                       title: "Let op: {{ raam_naam }}"
                       message: >
