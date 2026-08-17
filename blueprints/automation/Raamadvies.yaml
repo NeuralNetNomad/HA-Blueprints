@@ -19,7 +19,7 @@ blueprint:
       raam/deursensor (indien gekoppeld) nog niet in de gewenste stand staat.
 
     - Als de raam/deursensor van stand wisselt terwijl dat tegen het huidige
-      advies ingaat, krijg je een losse waarschuwing.
+      advies ingaat (en minimaal 30 seconden in die stand blijft), krijg je een losse waarschuwing.
 
 
     **Vereiste helper**
@@ -120,8 +120,7 @@ blueprint:
       selector:
         text:
 
-mode: queued
-max: 10
+mode: restart
 max_exceeded: silent
 
 trigger:
@@ -209,6 +208,10 @@ action:
           - condition: template
             value_template: "{{ huidig_advies in ['raam_open', 'raam_dicht'] }}"
         sequence:
+          # Wacht 30 seconden
+          - delay:
+              seconds: 30
+          # Controleer na 30 seconden of de stand nog steeds tegen het advies ingaat
           - choose:
               - conditions:
                   - condition: template
@@ -223,9 +226,9 @@ action:
                       title: "Let op: {{ raam_naam }}"
                       message: >
                         {% if is_state(raam_sensor, 'on') %}
-                          Het raam in de {{ raam_naam }} is net open gegaan, maar het advies was om
-                          het dicht te houden (buiten {{ buiten_temp | round(1) }}°C, binnen {{ binnen_temp | round(1) }}°C).
+                          Het raam in de {{ raam_naam }} staat al even open, maar het advies is om
+                          het dicht te houden (buiten {{ states(buiten_temp_entity) | float(0) | round(1) }}°C, binnen {{ states(binnen_temp_entity) | float(0) | round(1) }}°C).
                         {% else %}
-                          Het raam in de {{ raam_naam }} is net dicht gegaan, maar het advies was om
-                          het open te zetten (binnen {{ binnen_temp | round(1) }}°C, buiten {{ buiten_temp | round(1) }}°C).
+                          Het raam in de {{ raam_naam }} staat al even dicht, maar het advies is om
+                          het open te zetten (binnen {{ states(binnen_temp_entity) | float(0) | round(1) }}°C, buiten {{ states(buiten_temp_entity) | float(0) | round(1) }}°C).
                         {% endif %}
